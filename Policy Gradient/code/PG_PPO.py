@@ -273,7 +273,8 @@ class PolicyGradient(object):
 
             # run training operations
             for _ in range(self.n_updates_per_iteration):
-                #Update policy
+
+                # Update policy
                 dist = self.policy.action_distribution(observations)
                 log_probabilties = dist.log_prob(actions)
                 if not self.PPO:

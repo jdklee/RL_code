@@ -11,7 +11,7 @@ from network_utils import build_mlp, device, np2torch
 
 class BaselineNetwork(nn.Module):
     """
-    Class for implementing Baseline network
+    Class for implementing Baseline network to approximate state-value function
     """
 
     def __init__(self, config, env, n_layers, layer_size, learning_rate):
