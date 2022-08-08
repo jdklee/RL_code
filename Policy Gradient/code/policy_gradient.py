@@ -1,3 +1,5 @@
+from collections import deque
+
 import numpy as np
 import torch
 import gym
@@ -6,6 +8,7 @@ from general import get_logger, Progbar, export_plot
 from baseline_network import BaselineNetwork
 from network_utils import build_mlp, device, np2torch
 from policy import CategoricalPolicy, GaussianPolicy
+from ActorCritic import *
 
 
 class PolicyGradient(object):
@@ -53,8 +56,12 @@ class PolicyGradient(object):
 
         if config.use_baseline:
             self.baseline_network = BaselineNetwork(env, config)
-            self.baseline_network.action_dim=self.action_dim
-            self.baseline_network.observation_dim=self.observation_dim
+            self.baseline_network.action_dim = self.action_dim
+            self.baseline_network.observation_dim = self.observation_dim
+
+        if config.use_actor_critic:
+            self.Actor = Actor(self.env, self.config)
+            self.Critic = Critic(self.env, self.config)
 
     def init_policy(self):
         """
@@ -74,18 +81,14 @@ class PolicyGradient(object):
         """
         #######################################################
         #########   YOUR CODE HERE - 8-12 lines.   ############
-        net= build_mlp(input_size=self.observation_dim, output_size=self.action_dim,
-                  size=self.config.layer_size, n_layers=self.config.n_layers)
+        net = build_mlp(input_size=self.observation_dim, output_size=self.action_dim,
+                        size=self.config.layer_size, n_layers=self.config.n_layers)
 
         if self.discrete:
-            self.policy=CategoricalPolicy(net)
+            self.policy = CategoricalPolicy(net)
         else:
-            self.policy=GaussianPolicy(net, action_dim=self.action_dim)
-        self.optimizer=torch.optim.Adam(self.policy.network.parameters(), lr=self.lr)
-
-
-
-
+            self.policy = GaussianPolicy(net, action_dim=self.action_dim)
+        self.optimizer = torch.optim.Adam(self.policy.network.parameters(), lr=self.lr)
 
         #######################################################
         #########          END YOUR CODE.          ############
@@ -146,7 +149,7 @@ class PolicyGradient(object):
 
         while num_episodes or t < self.config.batch_size:
             state = env.reset()
-            states, actions, rewards = [], [], []
+            states, actions, rewards, values = [], [], [], []
             episode_reward = 0
 
             for step in range(self.config.max_ep_len):
@@ -202,14 +205,14 @@ class PolicyGradient(object):
         all_returns = []
         for path in paths:
             rewards = path["reward"]
-            returns=np.zeros_like(rewards)
-            returns[-1]=rewards[-1]
+            returns = np.zeros_like(rewards)
+            returns[-1] = rewards[-1]
             #######################################################
             #########   YOUR CODE HERE - 5-10 lines.   ############
             # for i in reversed(range(len(rewards-1))):
             #     returns[i]= rewards[i] + self.config.gamma * returns[i+1]
-            for i in range(len(rewards)-1):
-                returns[i]= rewards[i] + sum([self.config.gamma**j * rewards[j] for j in range(i+1,len(rewards))])
+            for i in range(len(rewards) - 1):
+                returns[i] = rewards[i] + sum([self.config.gamma ** j * rewards[j] for j in range(i + 1, len(rewards))])
 
             #######################################################
             #########          END YOUR CODE.          ############
@@ -245,7 +248,7 @@ class PolicyGradient(object):
         """
         #######################################################
         #########   YOUR CODE HERE - 1-2 lines.    ############
-        normalized_advantages = advantages/np.linalg.norm(advantages)
+        normalized_advantages = advantages / np.linalg.norm(advantages)
 
         #######################################################
         #########          END YOUR CODE.          ############
@@ -273,6 +276,24 @@ class PolicyGradient(object):
 
         return advantages
 
+    def update_policy_actor_critic(self, reward, new_state, old_state, action, I, done):
+        new_state = np2torch(new_state)
+        old_state = np2torch(old_state)
+        reward = np2torch(reward)
+        action = np2torch(action)
+        #######################################################
+        #########   YOUR CODE HERE - 5-7 lines.    ############
+        dist = self.policy.action_distribution(new_state)
+        log_probabilties = dist.log_prob(action)
+        if done:
+            advantage=reward-self.Critic(old_state)
+        else:
+            advantage = reward + self.config.gamma * self.Critic(new_state) - self.Critic(old_state)
+        self.loss = -torch.sum(log_probabilties * advantage) * I
+        self.optimizer.zero_grad()
+        self.loss.backward()
+        self.optimizer.step()
+
     def update_policy(self, observations, actions, advantages):
         """
         Args:
@@ -299,15 +320,12 @@ class PolicyGradient(object):
         advantages = np2torch(advantages)
         #######################################################
         #########   YOUR CODE HERE - 5-7 lines.    ############
-        dist= self.policy.action_distribution(observations)
-        log_probabilties= dist.log_prob(actions)
-        self.loss=-torch.sum(log_probabilties*advantages)
+        dist = self.policy.action_distribution(observations)
+        log_probabilties = dist.log_prob(actions)
+        self.loss = -torch.sum(log_probabilties * advantages)
         self.optimizer.zero_grad()
         self.loss.backward()
         self.optimizer.step()
-
-
-
 
         #######################################################
         #########          END YOUR CODE.          ############
@@ -320,6 +338,7 @@ class PolicyGradient(object):
         to see how all the code you've written fits together!
         """
         last_record = 0
+
 
         self.init_averages()
         all_total_rewards = (
@@ -373,6 +392,43 @@ class PolicyGradient(object):
             self.config.env_name,
             self.config.plot_output,
         )
+
+    def train_actor_critic(self, num_episodes):
+        """
+        Performs training
+
+        """
+
+        scores=[]
+        recent_scores=deque(maxlen=100)
+
+
+        for t in range(self.config.num_batches):
+            env = self.env
+            state = env.reset()
+            done=False
+            I = 1
+            score=0
+
+            for step in range(self.config.max_ep_len):
+                action = self.policy.act(state)[0]
+                new_state, reward, done, info = env.step(action)
+                # value = self.Critic(new_state)
+                # Q_SA = reward + self.config.gamma * self.Critic(new_state) if done else reward
+                # td_target = Q_SA -self.Critic(state)
+                score+=reward
+
+                # run training operations
+                self.Critic.update_value(reward=reward, new_observation=new_state, old_observation=state, I=I, done=done)
+
+                self.update_policy_actor_critic(reward=reward, new_state=new_state, old_state=state, I=I, action=action, done=done)
+                if done:
+                    break
+
+                I *= self.config.gamma
+                state=new_state
+
+            scores.append(score)
 
     def evaluate(self, env=None, num_episodes=1):
         """
