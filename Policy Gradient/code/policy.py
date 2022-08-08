@@ -45,6 +45,7 @@ class BasePolicy:
         sampled_actions=np.zeros(observations.shape[0])
         dist=self.action_distribution(observations)
         sampled_actions=dist.sample().numpy()
+        log_proba=dist.log_prob(sampled_actions)
         # sampled_actions=torch.multinomial(actions, len(observations)).numpy()
 
 
@@ -52,7 +53,7 @@ class BasePolicy:
 
         #######################################################
         #########          END YOUR CODE.          ############
-        return sampled_actions
+        return sampled_actions, log_proba
 
 
 class CategoricalPolicy(BasePolicy, nn.Module):

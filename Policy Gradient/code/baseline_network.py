@@ -14,7 +14,7 @@ class BaselineNetwork(nn.Module):
     Class for implementing Baseline network
     """
 
-    def __init__(self, env, config):
+    def __init__(self, config, env, n_layers, layer_size, learning_rate):
         """
         TODO:
         Create self.network using build_mlp, and create self.optimizer to
@@ -26,13 +26,16 @@ class BaselineNetwork(nn.Module):
         self.config = config
         self.env = env
         self.baseline = None
-        self.lr = self.config.learning_rate
+        self.lr = self.learning_rate
+        self.layer_size = layer_size
+        self.n_layers=n_layers
+
 
 
         #######################################################
         #########   YOUR CODE HERE - 2-8 lines.   #############
         self.observation_dim = self.env.observation_space.shape[0]
-        self.network =build_mlp(input_size=self.observation_dim, size=self.config.layer_size, n_layers=self.config.n_layers,
+        self.network =build_mlp(input_size=self.observation_dim, size=self.layer_size, n_layers=self.n_layers,
                   output_size=1)
         self.optimizer = torch.optim.Adam(self.network.parameters() ,lr=self.lr)
 
@@ -98,7 +101,7 @@ class BaselineNetwork(nn.Module):
         #########          END YOUR CODE.          ############
         return advantages
 
-    def update_baseline(self, returns, observations):
+    def update_baseline(self, loss):
         """
         Args:
             returns: np.array of shape [batch size], containing all discounted
@@ -112,8 +115,8 @@ class BaselineNetwork(nn.Module):
         If you want to use mini-batch SGD, we have provided a helper function
         called batch_iterator (implemented in general.py).
         """
-        returns = np2torch(returns)
-        observations = np2torch(observations)
+        # returns = np2torch(returns)
+        # observations = np2torch(observations)
         #######################################################
         #########   YOUR CODE HERE - 4-10 lines.  #############
         # print("return shape=",returns.shape)
@@ -122,7 +125,8 @@ class BaselineNetwork(nn.Module):
         # print("forward pass shape:",self.network(observations).squeeze().shape)
         # print(self.forward(observations))
         # print(returns)
-        self.loss=torch.nn.functional.mse_loss(returns, self.network(observations).squeeze())
+        # self.loss=torch.nn.functional.mse_loss(returns, self.network(observations).squeeze())
+        self.loss=loss
 
 
         self.loss.backward()

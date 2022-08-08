@@ -116,6 +116,7 @@ class Actor(nn.Module):
             advantage = reward - self.critic_network(old_state)
         else:
             advantage = reward + self.config.gamma * self.critic_network(new_state) - self.critic_network(old_state)
+        #Update actor in the direction of the critic
         self.loss = -torch.sum(log_probabilties * advantage) * I
         self.optimizer.zero_grad()
         self.loss.backward()
@@ -133,7 +134,7 @@ class Actor(nn.Module):
 
             for step in range(self.config.max_ep_len):
                 # Pick action given state using policy
-                action = self.policy.act(state)[0]
+                action, log_proba = self.policy.act(state)[0]
                 # Observe new state, reward
                 new_state, reward, done, info = env.step(action)
                 # value = self.Critic(new_state)
@@ -179,7 +180,7 @@ class Actor(nn.Module):
             score = 0
             while not done:
                 # env.render()
-                action = self.policy.act(state)
+                action, log_proba = self.policy.act(state)
                 new_state, reward, done, info = self.env.step(action)
                 score += reward
                 state = new_state
