@@ -14,7 +14,7 @@ class BaselineNetwork(nn.Module):
     Class for implementing Baseline network to approximate state-value function
     """
 
-    def __init__(self, config, env, n_layers, layer_size, learning_rate):
+    def __init__(self, env, n_layers, layer_size, learning_rate):
         """
         TODO:
         Create self.network using build_mlp, and create self.optimizer to
@@ -23,10 +23,9 @@ class BaselineNetwork(nn.Module):
         the size of the layers, and the learning rate.
         """
         super().__init__()
-        self.config = config
         self.env = env
         self.baseline = None
-        self.lr = self.learning_rate
+        self.lr = learning_rate
         self.layer_size = layer_size
         self.n_layers=n_layers
 
@@ -34,7 +33,7 @@ class BaselineNetwork(nn.Module):
 
         #######################################################
         #########   YOUR CODE HERE - 2-8 lines.   #############
-        self.observation_dim = self.env.observation_space.shape[0]
+        self.observation_dim = self.env.state_shape[0]
         self.network =build_mlp(input_size=self.observation_dim, size=self.layer_size, n_layers=self.n_layers,
                   output_size=1)
         self.optimizer = torch.optim.Adam(self.network.parameters() ,lr=self.lr)

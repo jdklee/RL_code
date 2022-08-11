@@ -39,15 +39,15 @@ class BasePolicy:
         actions to a numpy array, via numpy(). Put the result in a variable
         called sampled_actions (which will be returned).
         """
-        observations = np2torch(observations)
+        # observations = np2torch(observations)
         #######################################################
         #########   YOUR CODE HERE - 1-3 lines.    ############
         sampled_actions=np.zeros(observations.shape[0])
         dist=self.action_distribution(observations)
-        sampled_actions=dist.sample().numpy()
-        log_proba=dist.log_prob(sampled_actions)
+        sampled_actions=dist.sample()
+        log_proba=dist.log_prob(sampled_actions).detach().numpy()
         # sampled_actions=torch.multinomial(actions, len(observations)).numpy()
-
+        sampled_actions = dist.sample().numpy()
 
         # torch.distributions.Categorical.probs
 

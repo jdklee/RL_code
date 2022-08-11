@@ -8,6 +8,7 @@ from general import get_logger, Progbar, export_plot
 from baseline_network import BaselineNetwork
 from network_utils import build_mlp, device, np2torch
 from policy import CategoricalPolicy, GaussianPolicy
+from tensorboardX import SummaryWriter
 
 class PolicyGradient(object):
     """
@@ -16,26 +17,31 @@ class PolicyGradient(object):
     In essence, the baseline is the Critic Network of any Actor-Critic based policy gradient algorithm.
     """
 
-    def __init__(self, env, config, seed, PPO=True, logger=None, normalize_advantage_flag=True,
-                 max_ep_len=500, learning_rate=3e-2):
+    def __init__(self, env, seed=15, PPO=True, logger=None, normalize_advantage_flag=True,
+                 max_ep_len=500, learning_rate=3e-2, output_path="output"):
         # directory for training outputs
-
-        if not os.path.exists(config.output_path):
-            os.makedirs(config.output_path)
-
+        self.record_freq = 5
+        self.summary_freq = 1
+        self.use_baseline = True
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+        self.output_path=output_path
+        self.plot_output = self.output_path + "scores.png"
+        self.scores_output = self.output_path + "scores.npy"
         # store hyperparameters
         self.seed = seed
+        self.log_path = self.output_path + "log.txt"
         self.normalize_advantage_flag=normalize_advantage_flag
         self.max_ep_len = max_ep_len
         self.logger = logger
         if logger is None:
-            self.logger = get_logger(config.log_path)
+            self.logger = get_logger(self.log_path)
         self.env = env
         self.env.seed(self.seed)
 
         # discrete vs continuous action space
         self.discrete = isinstance(env.action_space, gym.spaces.Discrete)
-        self.observation_dim = self.env.observation_space.shape[0]
+        self.observation_dim = self.env.state_shape[0]
         self.action_dim = (
             self.env.action_space.n if self.discrete else self.env.action_space.shape[0]
         )
@@ -60,12 +66,10 @@ class PolicyGradient(object):
             self.clip=0.2
 
 
-
-
     def init_policy(self):
 
         net = build_mlp(input_size=self.observation_dim, output_size=self.action_dim,
-                        size=self.config.layer_size, n_layers=self.config.n_layers)
+                        size=self.layer_size, n_layers=self.n_layers)
 
         if self.discrete:
             self.policy = CategoricalPolicy(net)
@@ -117,8 +121,8 @@ class PolicyGradient(object):
         paths = []
         t = 0
 
-        while num_episodes or t < self.config.batch_size:
-            state = env.reset()
+        while num_episodes or t < self.batch_size:
+            state = env.reset(env_steps_size=self.batch_size)
             states, actions, rewards, values, log_probs = [], [], [], [], []
             episode_reward = 0
 
@@ -134,7 +138,7 @@ class PolicyGradient(object):
                 if done or step == self.max_ep_len - 1:
                     episode_rewards.append(episode_reward)
                     break
-                if (not num_episodes) and t == self.config.batch_size:
+                if (not num_episodes) and t == self.batch_size:
                     break
 
             path = {
@@ -179,7 +183,7 @@ class PolicyGradient(object):
             returns[-1] = rewards[-1]
 
             for i in range(len(rewards) - 1):
-                returns[i] = rewards[i] + sum([self.config.gamma ** j * rewards[j] for j in range(i + 1, len(rewards))])
+                returns[i] = rewards[i] + sum([self.gamma ** j * rewards[j] for j in range(i + 1, len(rewards))])
 
             all_returns.append(returns)
 
@@ -214,7 +218,7 @@ class PolicyGradient(object):
         Returns:
             advantages: np.array of shape [batch size]
         """
-        if self.config.use_baseline:
+        if self.use_baseline:
             # override the behavior of advantage by subtracting baseline
             advantages = self.baseline_network.calculate_advantage(
                 returns, observations
@@ -243,7 +247,7 @@ class PolicyGradient(object):
         Performs training
         """
         last_record = 0
-
+        self.create_writer()
 
         self.init_averages()
         all_total_rewards = (
@@ -251,7 +255,7 @@ class PolicyGradient(object):
         )  # the returns of all episodes samples for training purposes
         averaged_total_rewards = []  # the returns for each iteration
 
-        for t in range(self.config.num_batches):
+        for t in range(self.num_batches):
 
             # collect a minibatch of samples
             paths, total_rewards = self.sample_path(self.env)
@@ -292,7 +296,7 @@ class PolicyGradient(object):
                 self.baseline_network.update_baseline(value_loss)
 
             # logging
-            if t % self.config.summary_freq == 0:
+            if t % self.summary_freq == 0:
                 self.update_averages(total_rewards, all_total_rewards)
                 self.record_summary(t)
 
@@ -305,18 +309,18 @@ class PolicyGradient(object):
             averaged_total_rewards.append(avg_reward)
             self.logger.info(msg)
 
-            if self.config.record and (last_record > self.config.record_freq):
-                self.logger.info("Recording...")
-                last_record = 0
-                self.record()
+            # if self.record and (last_record > self.record_freq):
+            #     self.logger.info("Recording...")
+            #     last_record = 0
+            #     self.record()
 
         self.logger.info("- Training done.")
-        np.save(self.config.scores_output, averaged_total_rewards)
+        np.save(self.scores_output, averaged_total_rewards)
         export_plot(
             averaged_total_rewards,
             "Score",
-            self.config.env_name,
-            self.config.plot_output,
+            self.env.env_name,
+            self.plot_output,
         )
 
 
@@ -335,26 +339,26 @@ class PolicyGradient(object):
         self.logger.info(msg)
         return avg_reward
 
-    def record(self):
-        """
-        Recreate an env and record a video for one episode
-        """
-        env = gym.make(self.config.env_name)
-        env.seed(self.seed)
-        env = gym.wrappers.Monitor(
-            env, self.config.record_path, video_callable=lambda x: True, resume=True
-        )
-        self.evaluate(env, 1)
+    # def record(self):
+    #     """
+    #     Recreate an env and record a video for one episode
+    #     """
+    #     env = self.env
+    #     env.seed(self.seed)
+    #     env = gym.wrappers.Monitor(
+    #         env, self.config.record_path, video_callable=lambda x: True, resume=True
+    #     )
+    #     self.evaluate(env, 1)
 
     def run(self):
         """
         Apply procedures of training for a PG.
         """
         # record one game at the beginning
-        if self.config.record:
-            self.record()
+        # if self.config.record:
+        #     self.record()
         # model
         self.train()
         # record one game at the end
-        if self.config.record:
-            self.record()
+        # if self.config.record:
+        #     self.record()
