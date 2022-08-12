@@ -3,7 +3,7 @@ import random
 import gym
 import numpy as np
 import pandas as pd
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 from utils import write_to_file, TradingGraph
 from crypto_model_ppo import *
@@ -164,10 +164,10 @@ def Random_games(env, train_episodes=50, training_batch_size=500):
                 break
 
     print("average_net_worth:", average_net_worth / train_episodes)
-df = pd.read_csv('./pricedata.csv')
+df = pd.read_csv('./eth_data.csv')
 df = df.sort_values('Date')
 
-lookback_window_size = 50
+lookback_window_size = 30
 train_df = df[:-720-lookback_window_size]
 test_df = df[-720-lookback_window_size:] # 30 days
 
@@ -178,6 +178,6 @@ test_env = custonEnv(test_df, lookback_window=lookback_window_size)
 
 Actor=Actor(env=train_env, input_shape=train_env.state_shape, gamma=0.9, action_space=train_env.actions, lr=0.00001,
             n_layers=10, size=512, batch_size=500, logger=None, output_path="output")
-Actor.train(visualize=False, train_episodes=20000, training_batch_size=500)
+Actor.train(visualize=False, train_episodes=1500, training_batch_size=500)
 Actor.test_agent()
 # Random_games(train_env, train_episodes = 10, training_batch_size=500)

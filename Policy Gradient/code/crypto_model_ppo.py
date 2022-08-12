@@ -9,7 +9,10 @@ from baseline_network import *
 from network_utils import *
 
 class Actor(nn.Module):
-    def __init__(self, env, input_shape, action_space, lr, gamma, n_layers=10, size=512, batch_size=64, logger=None, output_path="output"):
+    def __init__(self, env, input_shape, action_space,
+                 lr, gamma, n_layers=10,
+                 size=512, batch_size=64, logger=None,
+                 output_path="output", net_type="linear"):
         super().__init__()
         self.env=env
         self.observation_size=500
@@ -23,13 +26,18 @@ class Actor(nn.Module):
         size=512
         n_layers=10
         output_size=len(action_space)
-        net = [nn.Linear(math.prod(input_shape), size), nn.ReLU()]
+        if net_type.lower()=='linear':
+            net = [nn.Linear(math.prod(input_shape), size), nn.ReLU()]
 
-        for _ in range(n_layers):
-            net.append(nn.Linear(size, size))
-            net.append(nn.ReLU())
+            for _ in range(n_layers):
+                net.append(nn.Linear(size, size))
+                net.append(nn.ReLU())
 
-        net.append(nn.Linear(size, output_size))
+            net.append(nn.Linear(size, output_size))
+        elif net_type.lower()=="lstm":
+            pass
+        elif net_type.lower()=="gru":
+            pass
         self.network=nn.Sequential(*net)
         self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
         self.batch_size=batch_size
@@ -133,9 +141,12 @@ class Actor(nn.Module):
         if len(scores_eval) > 0:
             self.eval_reward = scores_eval[-1]
     def train(self, visualize, train_episodes=50, training_batch_size=500):
-        # self.env.create_writer()
+        self.env.create_writer()
         all_total_rewards = []
         average_total_rewards=deque(maxlen=100)
+        self.value_loss_per_epoch=[]
+        self.policy_loss_per_epoch=[]
+        self.reward_per_epoch=[]
         # total_avg=
         best_avg=0
         print("start training")
@@ -200,7 +211,9 @@ class Actor(nn.Module):
             actions = np2torch(actions)
             advantages = np2torch(advantages)
             returns = np2torch(returns)
-            for _ in range(self.n_updates_per_iteration):
+            policy_loss_history=torch.zeros(5)
+            value_loss_history=torch.zeros(5)
+            for update in range(self.n_updates_per_iteration):
                 print("updating policy")
 
                 # Update policy
@@ -229,7 +242,14 @@ class Actor(nn.Module):
                 # update value
                 value_loss = torch.nn.functional.mse_loss(returns, self.Critic.forward(observations))
                 self.Critic.update_baseline(value_loss)
+                policy_loss_history[update]=policy_loss
+                value_loss_history[update]=value_loss
 
+            self.env.writer.add_scalar('Data/actor_loss_per_epoch', torch.mean(policy_loss_history), ep)
+            self.env.writer.add_scalar('Data/critic_loss_per_epoch', torch.mean(value_loss_history), ep)
+            self.value_loss_per_epoch.append(torch.mean(value_loss_history).detach().numpy())
+            self.policy_loss_per_epoch.append(torch.mean(policy_loss_history).detach().numpy())
+            self.reward_per_epoch = []
             if ep % self.summary_freq == 0:
                 self.update_averages(episode_rewards, all_total_rewards)
 
@@ -240,6 +260,8 @@ class Actor(nn.Module):
                 avg_reward, sigma_reward
             )
             average_total_rewards.append(avg_reward)
+            self.env.writer.add_scalar("Average reward / epoch", avg_reward, ep)
+            self.reward_per_epoch.append(avg_reward)
             self.logger.info(msg)
             avg=np.average(average_total_rewards)
             print("net worth {} {:.2f} {:.2f} {}".format(ep, self.env.net_worth, avg, self.env.episode_orders))
@@ -251,12 +273,25 @@ class Actor(nn.Module):
                 torch.save(self.Critic.network, "Crypto_trader_Critic.h5")
 
         self.logger.info("- Training done.")
+
         np.save(self.scores_output, average_total_rewards)
         export_plot(
             average_total_rewards,
             "Score",
             self.env.env_name,
             self.plot_output,
+        )
+        export_plot(
+        self.value_loss_per_epoch,
+            "value_loss",
+            self.env.env_name,
+            self.output_path+"/value_loss",
+        )
+        export_plot(
+            self.policy_loss_per_epoch,
+            "policy_loss",
+            self.env.env_name,
+            self.output_path+"/policy_loss",
         )
     def act(self, state):
         # print(np.expand_dims(state, axis=0).shape)
@@ -285,12 +320,13 @@ class Actor(nn.Module):
         # env.Actor.Critic=torch.load("Crypto_trader_Critic.h5")
         average_net_worth = 0
         for episode in range(test_episodes):
+            print(episode)
             state = self.env.reset()
             while True:
                 self.env.render(visualize)
                 action, log_proba, prediction = self.act(state)
                 state, reward, done, _ = self.env.step(action)
-                if self.env.current_step == self.env.end_step:
+                if self.env.current_step == self.env.end_step or done:
                     average_net_worth += self.env.net_worth
                     print("net_worth:", episode, self.env.net_worth, self.env.episode_orders)
                     break
