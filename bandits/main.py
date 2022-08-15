@@ -148,29 +148,22 @@ class LinUCB(BanditPolicy):
 
     def choose(self, x):
         """
-		See Algorithm 1 from paper:
-			"A Contextual-Bandit Approach to Personalized News Article Recommendation"
-
 		Args:
 			x: Dictionary containing the possible patient features. 
 		Returns:
 			output: string containing one of ('low', 'medium', 'high')
-
-		TODO:
-		Please implement the "forward pass" for Disjoint Linear Upper Confidence Bound Bandit algorithm. 
 		"""
         #######################################################
         #########   YOUR CODE HERE - ~7 lines.   #####
 
         theta= np.array([np.linalg.inv(self.A[i]).dot(self.b[i]) for i in range(self.n_arms)])
-        x = np.array([x[i] for i in self.features])
-        probs=np.array([np.dot(theta[i].T, x) + self.alpha * np.sqrt(x.T.dot(np.linalg.inv(self.A[i])).dot(x)) for i in range(self.n_arms)])
+        x = np.array([x[i] for i in self.features]).reshape((len(self.features),1))
 
-
-        print(probs)
+        probs=[np.dot(theta[i].T, x) + self.alpha * np.sqrt(np.dot(x.T, np.dot(np.linalg.inv(self.A[i]), x))) for i in range(self.n_arms)]
+        # print(probs)
 
         action=np.argmax(probs)
-        print(action)
+        # print(action)
         return self.arms[action]
 
     #######################################################
@@ -178,36 +171,22 @@ class LinUCB(BanditPolicy):
 
     def update(self, x, a, r):
         """
-		See Algorithm 1 from paper:
-			"A Contextual-Bandit Approach to Personalized News Article Recommendation"
-			
 		Args:
 			x: Dictionary containing the possible patient features. 
 			a: string, indicating the action your algorithem chose ('low', 'medium', 'high')
 			r: the reward you recieved for that action
 		Returns:
 			Nothing
-
-		TODO:
-		Please implement the update step for Disjoint Linear Upper Confidence Bound Bandit algorithm. 
-
-		Hint: Which parameters should you update?
 		"""
-    #######################################################
-    ########   YOUR CODE HERE - ~4 lines.   #############
-        # print(x)
+
+
         arm=self.arms.index(a)
-        features = np.array([x[i] for i in self.features])
-        self.A[arm]+= features.dot(features.T)
 
-        # print(np.array(r*features).shape)
-        # print(np.array(r).dot(features).reshape(-1,1))
-        # print(self.b[0])
-        # print()
-        self.b[arm] += (np.array(r).dot(features)).reshape(-1,1)
+        features = np.array([x[i] for i in self.features]).reshape([-1,1])
+        # print("featdotfeat=",np.dot(features, features.T).shape)
+        self.A[arm]+= np.dot(features, features.T)
+        self.b[arm] += r * features
 
-    #######################################################
-    #########          END YOUR CODE.          ############
 
 
 # eGreedy Linear bandit
@@ -223,27 +202,26 @@ class eGreedyLinB(LinUCB):
 		Returns:
 			output: string containing one of ('low', 'medium', 'high')
 
-		TODO:
 		Instead of using the Upper Confidence Bound to find which action to take, 
 		compute the probability of each action using a simple dot product between Theta & the input features.
 		Then use an epsilion greedy algorithm to choose the action. 
 		Use the value of epsilon provided
 		"""
-
         self.time += 1
         epsilon = float(1. / self.time) * self.alpha
-        #######################################################
-        #########   YOUR CODE HERE - ~7 lines.   #############
-        theta= np.array([np.linalg.inv(self.A[i]).dot(self.b[i]) for i in range(self.n_arms)])
-        features = np.array([x[i] for i in self.features])
-        probs=np.array([t*features for t in theta])
+
+        theta= [np.linalg.inv(self.A[i]).dot(self.b[i]) for i in range(self.n_arms)]
+        # print(theta[0].shape)
+        features = np.array([x[i] for i in self.features]).reshape((-1, 1))
+        # print(features.shape)
+        probs=[np.dot(t.T,features) for t in theta]
+        # print(probs)
         if random.random() < epsilon:
             chosen=random.choice(range(self.n_arms))
         else:
             chosen=np.argmax(probs)
         return self.arms[chosen]
-    #######################################################
-    #########
+
 
 
 # Thompson Sampling
@@ -265,7 +243,7 @@ class ThomSampB(BanditPolicy):
 
 		Hints:
 			- Keep track of a seperate B, mu, f for each action (this is what the Disjoint in the algorithm name means)
-			- Unlike in section 2.2 in the paper where they sample a single mu_tilde, we'll sample a mu_tilde for each arm 
+			- Unlike in section 2.2 in the paper where they sample a single mu_tilde, we'll sample a mu_tilde for each arm
 				based on our saved B, f, and mu values for each arm. Also, when we update, we only update the B, f, and mu
 				values for the arm that we selected
 			- What the paper refers to as b in our case is the medical features vector
@@ -276,17 +254,21 @@ class ThomSampB(BanditPolicy):
 
         #######################################################
         #########   YOUR CODE HERE - ~6 lines.   #############
-        self.n_arms = None
-        self.features = None
-        # Simply use aplha for the v mentioned in the paper
+        self.n_arms = n_arms
+        self.features = features
+        self.arms=["low","medium","high"]
+        # Simply use alpha for the v mentioned in the paper
         self.v2 = alpha
-        self.B = []
+        self.B = [np.identity(len(features)) for _ in range(n_arms)]
 
         # Variable used to keep track of data needed to compute mu
-        self.f = []
+        self.f={}
+        for i in range(n_arms):
+            self.f[i]=[np.zeros((len(features),1))]
+
 
         # You can actually compute mu from B and f at each time step. So you don't have to use this.
-        self.mu = []
+        # self.mu = [np.zeros((len(features),1)) for _ in range(n_arms)]
 
     #######################################################
     #########          END YOUR CODE.          ############
@@ -308,7 +290,36 @@ class ThomSampB(BanditPolicy):
 
         #######################################################
         #########   YOUR CODE HERE - ~8 lines.   #############
-        return ""
+        features = np.array([x[i] for i in self.features]).reshape((-1, 1))
+        mu_tilda=[]
+        for i in range(self.n_arms):
+            mu=np.linalg.inv(self.B[i])
+            print(self.f[i][0].shape)
+            temp=np.identity(len(features))
+            for j in range(len(self.f[i])):
+                print(self.f[i][j].T.shape)
+                print(self.f[i][j].shape)
+
+                temp+= self.f[i][j].T.dot(self.f[i][j])
+
+            # print(temp)
+
+            mu=mu.dot(temp)
+            mt=np.random.normal(mu, self.v2*np.linalg.inv(self.B[i]))
+            print(mt.shape)
+            # print(mt)
+            mt=np.amax(mt, axis=1)
+            print(mt.reshape((len(features),1)).shape)
+            # print(mt)
+            mu_tilda.append(mt)
+
+
+        probs=[np.sum(features.T.dot(mu_tilda[i])) for i in range(self.n_arms)]
+        print(probs)
+        return self.arms[np.argmax(probs)]
+
+
+
 
     #######################################################
     #########          END YOUR CODE.          ############
@@ -334,6 +345,13 @@ class ThomSampB(BanditPolicy):
 
     #######################################################
     #########   YOUR CODE HERE - ~6 lines.   #############
+        features = np.array([x[i] for i in self.features]).reshape((-1, 1))
+        for i in range(self.n_arms):
+            self.B[i] = np.identity(len(features)) + np.sum([self.f[i][j].T.dot(self.f[i][j]) for j in range(len(self.f[i]))])
+            # self.mu[i] = np.linalg.inv(self.B[i]).dot(np.sum(self.f[i], axis=0))
+            print(features.shape)
+            self.f[i].append(features)
+
 
     #######################################################
     #########          END YOUR CODE.          ############
