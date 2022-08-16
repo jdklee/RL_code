@@ -251,9 +251,6 @@ class ThomSampB(BanditPolicy):
 				however if you can't access prior data how might one store the result from the prior time steps.
 		
 		"""
-
-        #######################################################
-        #########   YOUR CODE HERE - ~6 lines.   #############
         self.n_arms = n_arms
         self.features = features
         self.arms=["low","medium","high"]
@@ -262,16 +259,13 @@ class ThomSampB(BanditPolicy):
         self.B = [np.identity(len(features)) for _ in range(n_arms)]
 
         # Variable used to keep track of data needed to compute mu
-        self.f={}
-        for i in range(n_arms):
-            self.f[i]=[np.zeros((len(features),1))]
+        self.f=[[np.ones((len(features),1))] for _ in range(n_arms)]
+        self.r=[[0] for _ in range(n_arms)]
 
 
-        # You can actually compute mu from B and f at each time step. So you don't have to use this.
-        # self.mu = [np.zeros((len(features),1)) for _ in range(n_arms)]
+        #  can actually compute mu from B and f at each time step, so don't have to use this.
+        # self.mu = [0.1 for _ in range(n_arms)]
 
-    #######################################################
-    #########          END YOUR CODE.          ############
 
     def choose(self, x):
         """
@@ -287,42 +281,25 @@ class ThomSampB(BanditPolicy):
 		Please implement the "forward pass" for Disjoint Thompson Sampling Bandit algorithm. 
 		Please use the gaussian distribution like they do in the paper
 		"""
-
-        #######################################################
-        #########   YOUR CODE HERE - ~8 lines.   #############
         features = np.array([x[i] for i in self.features]).reshape((-1, 1))
         mu_tilda=[]
         for i in range(self.n_arms):
             mu=np.linalg.inv(self.B[i])
-            print(self.f[i][0].shape)
-            temp=np.identity(len(features))
+            temp=np.zeros((len(features),1))
             for j in range(len(self.f[i])):
-                print(self.f[i][j].T.shape)
-                print(self.f[i][j].shape)
-
-                temp+= self.f[i][j].T.dot(self.f[i][j])
-
-            # print(temp)
-
+                temp+= self.f[i][j]*self.r[i][j]
             mu=mu.dot(temp)
-            mt=np.random.normal(mu, self.v2*np.linalg.inv(self.B[i]))
-            print(mt.shape)
-            # print(mt)
-            mt=np.amax(mt, axis=1)
-            print(mt.reshape((len(features),1)).shape)
-            # print(mt)
+
+            # print(self.v2*np.linalg.inv(self.B[i]))
+            mt=np.random.normal(mu, abs(self.v2*np.linalg.inv(self.B[i])))
+            # print(mt.shape) #(DXD MATRIX! DEATH!)
             mu_tilda.append(mt)
 
-
-        probs=[np.sum(features.T.dot(mu_tilda[i])) for i in range(self.n_arms)]
-        print(probs)
+        probs=[(np.ones((1,len(features))).dot(mu_tilda[i])).dot(features) for i in range(self.n_arms)]
+        # print(probs)
         return self.arms[np.argmax(probs)]
 
 
-
-
-    #######################################################
-    #########          END YOUR CODE.          ############
 
     def update(self, x, a, r):
         """
@@ -342,19 +319,16 @@ class ThomSampB(BanditPolicy):
 
 		Hint: Which parameters should you update?
 		"""
-
-    #######################################################
-    #########   YOUR CODE HERE - ~6 lines.   #############
         features = np.array([x[i] for i in self.features]).reshape((-1, 1))
-        for i in range(self.n_arms):
-            self.B[i] = np.identity(len(features)) + np.sum([self.f[i][j].T.dot(self.f[i][j]) for j in range(len(self.f[i]))])
-            # self.mu[i] = np.linalg.inv(self.B[i]).dot(np.sum(self.f[i], axis=0))
-            print(features.shape)
-            self.f[i].append(features)
-
-
-    #######################################################
-    #########          END YOUR CODE.          ############
+        arm=self.arms.index(a)
+        self.f[arm].append(features)
+        # print(features)
+        self.r[arm].append(r)
+        self.B[arm] = np.identity(len(features)) + \
+                      np.sum([self.f[arm][j].dot(self.f[arm][j].T) for j in range(len(self.f[arm]))], axis=0)
+        # print(np.sum([self.f[arm][j].dot(self.f[arm][j].T) for j in range(len(self.f[arm]))], axis=0))
+        # print((self.B[arm]<0).any())
+        # print((np.linalg.inv(self.B[arm])<0).any())
 
 
 def run(data, learner, large_error_penalty=False):
