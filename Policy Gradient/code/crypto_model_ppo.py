@@ -14,6 +14,7 @@ class Actor(nn.Module):
                  size=512, batch_size=64, logger=None,
                  output_path="output", net_type="linear"):
         super().__init__()
+        self.net_type=net_type
         self.env=env
         self.observation_size=500
         input_tensor=torch.randn(input_shape)
@@ -35,9 +36,32 @@ class Actor(nn.Module):
 
             net.append(nn.Linear(size, output_size))
         elif net_type.lower()=="lstm":
-            pass
+            class extract_tensor(nn.Module):
+                def forward(self, x):
+                    tensor, (hn, cn) = x
+                    return hn
+            net = [nn.LSTM(input_shape[1], size, num_layers=1, batch_first=True)]
+            net.append(extract_tensor())
+            net.append(nn.LSTM(size, size, num_layers=1, batch_first=True))
+            net.append(extract_tensor())
+            net.append(nn.Linear(size, size))
+            net.append(nn.ReLU())
+            net.append(nn.Linear(size, output_size))
+
         elif net_type.lower()=="gru":
-            pass
+            class extract_tensor(nn.Module):
+                def forward(self, x):
+                    tensor, hn = x
+                    return hn
+            net = [nn.GRU(math.prod(input_shape), size, n_layers=2, batch_first=True)]
+            net.append(nn.Linear(size, size))
+            net.append(nn.ReLU())
+            net.append(nn.Linear(size, output_size))
+        elif net_type.lower()=="cnn":
+            net = [nn.GRU(math.prod(input_shape), size, n_layers=2, batch_first=True)]
+            net.append(nn.Linear(size, size))
+            net.append(nn.ReLU())
+            net.append(nn.Linear(size, output_size))
         self.network=nn.Sequential(*net)
         self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
         self.batch_size=batch_size
@@ -53,9 +77,12 @@ class Actor(nn.Module):
         if logger is None:
             self.logger = get_logger(self.log_path)
 
-        self.Critic=Critic(env=self.env, n_layers=n_layers, layer_size=size, learning_rate=self.lr)
+        self.Critic=Critic(env=self.env, n_layers=n_layers, layer_size=size, learning_rate=self.lr, net_type=self.net_type)
 
     def forward(self, state):
+        # print(state.shape)
+        # if self.net_type.lower()=="linear":
+        #     state=state.flatten()
         output = self.network(state)
         return output
 
@@ -69,6 +96,9 @@ class Actor(nn.Module):
         while t < num_episodes:
             state = env.reset(env_steps_size=500)
             env.render()
+            # print("state shape:",state.shape)
+            if self.net_type=="linear":
+                state=state.flatten()
             states, next_states,actions, rewards, values, log_probs, predictions =[], [], [], [], [], [], []
             episode_reward = 0
             # print(t)
@@ -78,7 +108,9 @@ class Actor(nn.Module):
                 action, log_prob, prediction = self.act(state)
                 predictions.append(prediction)
                 log_probs.append(log_prob)
-                state, reward, done,_ = env.step(action)
+                state, reward, done = env.step(action)
+                if self.net_type=="linear":
+                    state=state.flatten()
                 next_states.append(state)
                 actions.append(action)
                 rewards.append(reward)
@@ -141,7 +173,7 @@ class Actor(nn.Module):
         if len(scores_eval) > 0:
             self.eval_reward = scores_eval[-1]
     def train(self, visualize, train_episodes=50, training_batch_size=500):
-        self.env.create_writer()
+        # self.env.create_writer()
         all_total_rewards = []
         average_total_rewards=deque(maxlen=100)
         self.value_loss_per_epoch=[]
@@ -190,7 +222,7 @@ class Actor(nn.Module):
             batch_log = np.concatenate([path["log_prob"] for path in paths])
             # compute Q-val estimates (discounted future returns) for each time step
             returns = self.get_returns(paths)
-            print(observations.shape)
+            # print("sampled_obs_shape:",observations.shape)
             # t=[]
             # idxes=[]
             # for idx,x in enumerate(observations):
@@ -204,6 +236,7 @@ class Actor(nn.Module):
             #     i=i.flatten()
             #     values[idx]=self.Critic.forward(i)
             advantages=np2torch(returns)-self.Critic.forward(observations)
+            # print("advantages shape:",advantages.shape)
             advantages=advantages.detach().numpy()
             #Normalize advantages
             advantages = advantages / np.linalg.norm(advantages)
@@ -225,12 +258,15 @@ class Actor(nn.Module):
                 #     logits[idx]=i
                 # logits=torch.tensor(logits)
                 # print(logits)
+                # print("obs before actor forward:",observations.shape)
                 logits=self.forward(observations)
+                # print(logits.shape)
 
                 distribution = torch.distributions.Categorical(logits=logits)
                 # dist = self.policy.action_distribution(observations)
                 log_probabilties = distribution.log_prob(actions)
                 ratios=log_probabilties-np2torch(batch_log)
+                # print("ratios shape:", ratios.shape)
 
                 ratios = torch.exp(ratios)
                 surrogate_loss_1 = ratios * advantages
@@ -240,13 +276,17 @@ class Actor(nn.Module):
                 self.update_policy(policy_loss)
 
                 # update value
+                # print(returns.shape)
+                # # print(self.Critic.forward(observations).shape)
+                # print(observations.shape)
+                # print(self.Critic.forward(observations))
                 value_loss = torch.nn.functional.mse_loss(returns, self.Critic.forward(observations))
                 self.Critic.update_baseline(value_loss)
                 policy_loss_history[update]=policy_loss
                 value_loss_history[update]=value_loss
 
-            self.env.writer.add_scalar('Data/actor_loss_per_epoch', torch.mean(policy_loss_history), ep)
-            self.env.writer.add_scalar('Data/critic_loss_per_epoch', torch.mean(value_loss_history), ep)
+            # self.env.writer.add_scalar('Data/actor_loss_per_epoch', torch.mean(policy_loss_history), ep)
+            # self.env.writer.add_scalar('Data/critic_loss_per_epoch', torch.mean(value_loss_history), ep)
             self.value_loss_per_epoch.append(torch.mean(value_loss_history).detach().numpy())
             self.policy_loss_per_epoch.append(torch.mean(policy_loss_history).detach().numpy())
             self.reward_per_epoch = []
@@ -260,7 +300,7 @@ class Actor(nn.Module):
                 avg_reward, sigma_reward
             )
             average_total_rewards.append(avg_reward)
-            self.env.writer.add_scalar("Average reward / epoch", avg_reward, ep)
+            # self.env.writer.add_scalar("Average reward / epoch", avg_reward, ep)
             self.reward_per_epoch.append(avg_reward)
             self.logger.info(msg)
             avg=np.average(average_total_rewards)
@@ -268,9 +308,9 @@ class Actor(nn.Module):
             # if ep > len(average_total_rewards):
             if best_avg < avg:
                 best_avg = avg
-                print("Saving model")
-                torch.save(self.network, "Crypto_trader_Actor.h5")
-                torch.save(self.Critic.network, "Crypto_trader_Critic.h5")
+                # print("Saving model")
+                # torch.save(self.network, "Crypto_trader_Actor.h5")
+                # torch.save(self.Critic.network, "Crypto_trader_Critic.h5")
 
         self.logger.info("- Training done.")
 
@@ -295,8 +335,14 @@ class Actor(nn.Module):
         )
     def act(self, state):
         # print(np.expand_dims(state, axis=0).shape)
+        # if self.net_type.lower()=="linear":
+        #     state=state.flatten()
+        # print("state before network:",state.shape)
+        # if self.net_type!="linear":
+        #     state=state.reshape([1,self.env.lookback_window, self.env.state_shape[1]])
+        # print("state before network:", state.shape)
         state=np2torch(state)
-        state=state.flatten()
+        # state=state.flatten()
         prediction = self.network(state)
         # print(prediction)
         dist = torch.distributions.Categorical(logits=prediction)
@@ -334,7 +380,7 @@ class Actor(nn.Module):
         print("average {} episodes agent net_worth: {}".format(test_episodes, average_net_worth / test_episodes))
 
 class Critic(nn.Module):
-    def __init__(self, env, n_layers, layer_size, learning_rate):
+    def __init__(self, env, n_layers, layer_size, learning_rate, net_type):
         super().__init__()
         self.env = env
         self.baseline = None
@@ -345,13 +391,50 @@ class Critic(nn.Module):
         n_layers=10
         output_size=1
         input_shape=self.env.state_shape
-        net = [nn.Linear(math.prod(input_shape), size), nn.ReLU()]
+        if net_type.lower()=='linear':
+            net = [nn.Linear(math.prod(input_shape), size), nn.ReLU()]
 
-        for _ in range(n_layers):
+            for _ in range(n_layers):
+                net.append(nn.Linear(size, size))
+                net.append(nn.ReLU())
+
+            net.append(nn.Linear(size, output_size))
+        elif net_type.lower()=="lstm":
+            class extract_tensor(nn.Module):
+                def forward(self, x):
+                    # tensor, (hn,cn) = x
+                    tensor, (hn, cn) = x
+                    # print("critic lstm tensor shape:",tensor.shape)
+                    # print("critic hidden ent shape:",hn.shape)
+                    # print("critic cn shape",cn.shape)
+                    return hn[0]
+            class extract_tensor2(nn.Module):
+                def forward(self, x):
+                    # tensor, (hn,cn) = x
+                    tensor, (hn, cn) = x
+                    # print("critic lstm tensor shape:",tensor.shape)
+                    # print("critic hidden ent shape:",hn.shape)
+                    # print("critic cn shape",cn.shape)
+                    return tensor
+            net = [nn.LSTM(input_shape[1], size, num_layers=1, batch_first=True)]
+            net.append(extract_tensor())
+            net.append(nn.LSTM(size, size, num_layers=1, batch_first=True))
+            net.append(extract_tensor2())
             net.append(nn.Linear(size, size))
             net.append(nn.ReLU())
+            net.append(nn.Linear(size, output_size))
 
-        net.append(nn.Linear(size, output_size))
+        elif net_type.lower()=="gru":
+            net = [nn.GRU(math.prod(input_shape), size, n_layers=2, batch_first=True)]
+            net.append(nn.Linear(size, size))
+            net.append(nn.ReLU())
+            net.append(nn.Linear(size, output_size))
+        elif net_type.lower()=="cnn":
+            net = [nn.GRU(math.prod(input_shape), size, n_layers=2, batch_first=True)]
+            net.append(nn.Linear(size, size))
+            net.append(nn.ReLU())
+            net.append(nn.Linear(size, output_size))
+
         self.network=nn.Sequential(*net)
         self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
 
@@ -360,6 +443,7 @@ class Critic(nn.Module):
             observations=np2torch(observations)
         except:
             pass
+        # print("critic obs shape:",observations.shape)
         output=self.network(observations).squeeze()
         return output
 

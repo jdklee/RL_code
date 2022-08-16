@@ -288,14 +288,14 @@ class ThomSampB(BanditPolicy):
             temp=np.zeros((len(features),1))
             for j in range(len(self.f[i])):
                 temp+= self.f[i][j]*self.r[i][j]
+            temp/=len(self.f[i])
             mu=mu.dot(temp)
-
-            # print(self.v2*np.linalg.inv(self.B[i]))
-            mt=np.random.normal(mu, abs(self.v2*np.linalg.inv(self.B[i])))
-            # print(mt.shape) #(DXD MATRIX! DEATH!)
+            v2=np.full((1,len(features)),self.v2)
+            std=abs(v2.dot(np.linalg.inv(self.B[i])).reshape((len(features),1)))
+            mt=np.random.normal(mu, std, size=(len(features),1))
             mu_tilda.append(mt)
 
-        probs=[(np.ones((1,len(features))).dot(mu_tilda[i])).dot(features) for i in range(self.n_arms)]
+        probs=[features.T.dot(mu_tilda[i]) for i in range(self.n_arms)]
         # print(probs)
         return self.arms[np.argmax(probs)]
 
@@ -322,13 +322,10 @@ class ThomSampB(BanditPolicy):
         features = np.array([x[i] for i in self.features]).reshape((-1, 1))
         arm=self.arms.index(a)
         self.f[arm].append(features)
-        # print(features)
         self.r[arm].append(r)
         self.B[arm] = np.identity(len(features)) + \
-                      np.sum([self.f[arm][j].dot(self.f[arm][j].T) for j in range(len(self.f[arm]))], axis=0)
-        # print(np.sum([self.f[arm][j].dot(self.f[arm][j].T) for j in range(len(self.f[arm]))], axis=0))
-        # print((self.B[arm]<0).any())
-        # print((np.linalg.inv(self.B[arm])<0).any())
+                      1/len(self.f[arm]) * np.sum([self.f[arm][j].dot(self.f[arm][j].T) for j in range(len(self.f[arm]))], axis=0)
+
 
 
 def run(data, learner, large_error_penalty=False):

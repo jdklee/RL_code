@@ -11,9 +11,9 @@ import numpy as np
 def write_to_file(date, order_history, filename="{}.txt".format(datetime.now().strftime("%Y-%m-%d %H-%M-%S"))):
     for i in order_history:
         date+= " {}".format(i)
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
-    filepath='C:/Users/dolee8/PycharmProjects/RL_code/Policy Gradient/code/logs/'
+    if not os.path.exists('/Users/jdklee/Documents/GitHub/RL_code/Policy Gradient/code/logs'):
+        os.makedirs('/Users/jdklee/Documents/GitHub/RL_code/Policy Gradient/code/logs')
+    filepath='/Users/jdklee/Documents/GitHub/RL_code/Policy Gradient/code/logs/'
 
     # print(os.path.exists(filepath))
     # os.chdir(filepath)
