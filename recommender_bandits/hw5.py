@@ -29,12 +29,6 @@ class LinUCB:
 		self.A = [np.identity(num_features) for _ in range(num_arms)]
 		self.b = [np.zeros((num_features, 1)) for _ in range(num_arms)]
 
-	#######################################################
-		#########   YOUR CODE HERE - ~4 lines.   #############
-
-		#######################################################
-		#########          END YOUR CODE.          ############
-		
 
 	def choose(self, x):
 		"""
@@ -49,10 +43,10 @@ class LinUCB:
 		Please implement the "forward pass" for Disjoint Linear Upper Confidence Bound Bandit algorithm. 
 		You can return the index of the chosen action directly. No need to return a string name for the action as you did in A4
 		"""
-		#######################################################
-		#########   YOUR CODE HERE - ~5 lines.   #############
-		#######################################################
-		#########          END YOUR CODE.          ############
+		x=x.reshape((len(x),1))
+		theta=[np.linalg.inv(self.A[i]).dot(self.b[i]) for i in range(self.num_arms)]
+		probs=[theta[i].T.dot(x) + self.alpha * np.sqrt(x.T.dot(np.linalg.inv(self.A[i])).dot(x)) for i in range(self.num_arms)]
+		return np.argmax(probs)
 
 	def update(self, x, a, r):
 		"""
@@ -68,10 +62,9 @@ class LinUCB:
 
 		Please implement the update step for Disjoint Linear Upper Confidence Bound Bandit algorithm. 
 		"""
-		#######################################################
-		#########   YOUR CODE HERE - ~2 lines.   #############
-		#######################################################
-		#########          END YOUR CODE.          ############
+		self.A[a]+= x.dot(x.T)
+		self.b[a] += r*x
+
 
 	def add_arm_params(self):
 		"""
@@ -82,7 +75,8 @@ class LinUCB:
 		#########   YOUR CODE HERE - ~2 lines.   #############
 		#######################################################
 		#########          END YOUR CODE.          ############
-
+		self.A.append(np.identity(self.num_features))
+		self.b.append(np.zeros((len(self.num_features),1)))
 
 ############ RUNNER ############
 

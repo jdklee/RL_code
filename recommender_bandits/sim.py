@@ -158,6 +158,13 @@ class Simulator:
 			The new ID should be the next integer in the sequence of arm IDs
 			Don't forget to update self.num_arms
 			'''
+			theta=np.zeros_like(self.arms[0])
+			eta=0.1
+			theta += eta*np.sum([(theta.T.dot(self.users[uid]) - (self.arms[aid].T.dot(self.users[uid]))).\
+								dot(self.users[uid]) for uid, aid, b_arm in self.logs], axis=0)
+			self.arms[self.num_arms]=theta
+			self.num_arms+=1
+
 
 			#######################################################
 			#########   YOUR CODE HERE - ~9 lines.   #############
