@@ -106,7 +106,9 @@ class Simulator:
 			if len(count_dict)<2:
 				return False
 			pop_arms=sorted(count_dict, key=count_dict.get, reverse=True)[:2]
-			thetas=[self.arms[pop_arms[i]] for i in pop_arms]
+			# print(pop_arms)
+			# print(self.arms)
+			thetas=[self.arms[i] for i in pop_arms]
 			mean_theta=np.mean(thetas, axis=0)
 			self.arms[self.num_arms]=mean_theta
 			self.num_arms+=1
@@ -160,8 +162,16 @@ class Simulator:
 			'''
 			theta=np.zeros_like(self.arms[0])
 			eta=0.1
-			theta += eta*np.sum([(theta.T.dot(self.users[uid]) - (self.arms[aid].T.dot(self.users[uid]))).\
-								dot(self.users[uid]) for uid, aid, b_arm in self.logs], axis=0)
+			sumo=[]
+			for uid, aid, b_arm in self.logs:
+				t1=theta.T.dot(self.users[uid])
+				t2= self.arms[aid].T.dot(self.users[uid])
+				# print(t1-t2)
+				t3 = self.users[uid]
+				res=(t1-t2)*t3
+				# print(res)
+				sumo.append(res)
+			theta=np.sum(sumo,axis=0)
 			self.arms[self.num_arms]=theta
 			self.num_arms+=1
 

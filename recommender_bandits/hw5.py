@@ -63,7 +63,11 @@ class LinUCB:
 		Please implement the update step for Disjoint Linear Upper Confidence Bound Bandit algorithm. 
 		"""
 		self.A[a]+= x.dot(x.T)
-		self.b[a] += r*x
+		# print(r.shape)
+		b_temp=x*r
+
+
+		self.b[a] +=b_temp.reshape(-1,1)
 
 
 	def add_arm_params(self):
@@ -76,7 +80,7 @@ class LinUCB:
 		#######################################################
 		#########          END YOUR CODE.          ############
 		self.A.append(np.identity(self.num_features))
-		self.b.append(np.zeros((len(self.num_features),1)))
+		self.b.append(np.zeros((self.num_features,1)))
 
 ############ RUNNER ############
 
