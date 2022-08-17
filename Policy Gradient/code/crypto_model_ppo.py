@@ -1,3 +1,4 @@
+import datetime
 import math
 import os
 from collections import deque
@@ -10,7 +11,7 @@ from network_utils import *
 
 class Actor(nn.Module):
     def __init__(self, env, input_shape, action_space,
-                 lr, gamma, n_layers=10,
+                 lr, gamma, n_layers=10,max_ep_len=500,
                  size=512, batch_size=64, logger=None,
                  output_path="output", net_type="linear"):
         super().__init__()
@@ -19,7 +20,7 @@ class Actor(nn.Module):
         self.observation_size=500
         input_tensor=torch.randn(input_shape)
         self.action_space=action_space
-        self.max_ep_len=500
+        self.max_ep_len=max_ep_len
         self.clip=0.2
         self.lr=lr
         self.gamma=gamma
@@ -48,20 +49,43 @@ class Actor(nn.Module):
             net.append(nn.ReLU())
             net.append(nn.Linear(size, output_size))
 
-        elif net_type.lower()=="gru":
-            class extract_tensor(nn.Module):
-                def forward(self, x):
-                    tensor, hn = x
-                    return hn
-            net = [nn.GRU(math.prod(input_shape), size, n_layers=2, batch_first=True)]
-            net.append(nn.Linear(size, size))
-            net.append(nn.ReLU())
-            net.append(nn.Linear(size, output_size))
+        # elif net_type.lower()=="gru":
+        #     class extract_tensor(nn.Module):
+        #         def forward(self, x):
+        #             tensor, hn = x
+        #             return hn
+        #     net = [nn.GRU(math.prod(input_shape), size, n_layers=2, batch_first=True)]
+        #     net.append(nn.Linear(size, size))
+        #     net.append(nn.ReLU())
+        #     net.append(nn.Linear(size, output_size))
         elif net_type.lower()=="cnn":
-            net = [nn.GRU(math.prod(input_shape), size, n_layers=2, batch_first=True)]
-            net.append(nn.Linear(size, size))
-            net.append(nn.ReLU())
-            net.append(nn.Linear(size, output_size))
+            class print_tensor(nn.Module):
+                def forward(self,x):
+                    print(x.shape)
+                    return x
+
+            class flatten_tensor(nn.Module):
+                def forward(self, x):
+                    if len(x.shape)>2:
+                        x=x.reshape((x.shape[0],1,-1))
+                    else:
+                        x=x.reshape((1,-1))
+                    return x
+
+            net=[nn.Conv1d(in_channels=self.env.lookback_window_size,
+                      out_channels=64,
+                      kernel_size=6, stride=3,
+                      padding=4, dilation=1),
+                 nn.MaxPool1d(kernel_size=3, padding=1, dilation=1, stride=2),
+                 nn.Conv1d(in_channels=64,
+                      out_channels=64,
+                      kernel_size=4, stride=2,
+                      padding=3),
+                 nn.MaxPool1d(kernel_size=2, stride=2, padding=0, dilation=1),
+                 flatten_tensor(),
+                 nn.Linear(128, size),
+                 nn.ReLU(),
+                 nn.Linear(size, output_size)]
         self.network=nn.Sequential(*net)
         self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
         self.batch_size=batch_size
@@ -69,7 +93,7 @@ class Actor(nn.Module):
         if not os.path.exists(output_path):
             os.makedirs(output_path)
         self.output_path=output_path
-        self.plot_output = self.output_path + "/scores.png"
+        self.plot_output = self.output_path + "/{}_scores.png".format(self.net_type)
         self.scores_output = self.output_path + "/scores.npy"
         self.summary_freq = 1
         # store hyperparameters
@@ -91,7 +115,7 @@ class Actor(nn.Module):
         episode_rewards = []
         paths = []
         t = 0
-        print("sampling path")
+        # print("sampling path")
 
         while t < num_episodes:
             state = env.reset(env_steps_size=500)
@@ -114,12 +138,14 @@ class Actor(nn.Module):
                 next_states.append(state)
                 actions.append(action)
                 rewards.append(reward)
+                # print("reward:",reward)
                 episode_reward += reward
                 t += 1
                 if done or step == self.max_ep_len - 1:
                     episode_rewards.append(episode_reward)
                     break
                 if (not num_episodes) and t == self.batch_size:
+                    # episode_rewards.append(episode_reward)
                     break
 
             path = {
@@ -181,7 +207,9 @@ class Actor(nn.Module):
         self.reward_per_epoch=[]
         # total_avg=
         best_avg=0
-        print("start training")
+        total_average = []
+        # print("start training")
+        episodic_loss_limit=0
         for ep in range(train_episodes):
             # state = self.env.reset(env_steps_size=500)
             # self.env.render(visualize)
@@ -211,6 +239,7 @@ class Actor(nn.Module):
             #     value_loss = torch.nn.functional.mse_loss(reward+abs((done-1)) * self.gamma * self.Critic.forward(new_state.flatten()),
             #                                               self.Critic.forward(state.flatten()))
             #     self.Critic.update_baseline(value_loss)
+
 
             paths, episode_rewards = self.sample_path(self.env, num_episodes=training_batch_size)
             self.env.render(visualize)
@@ -247,7 +276,7 @@ class Actor(nn.Module):
             policy_loss_history=torch.zeros(5)
             value_loss_history=torch.zeros(5)
             for update in range(self.n_updates_per_iteration):
-                print("updating policy")
+                # print("updating policy")
 
                 # Update policy
                 # logits=torch.zeros(len(observations))
@@ -289,6 +318,19 @@ class Actor(nn.Module):
             # self.env.writer.add_scalar('Data/critic_loss_per_epoch', torch.mean(value_loss_history), ep)
             self.value_loss_per_epoch.append(torch.mean(value_loss_history).detach().numpy())
             self.policy_loss_per_epoch.append(torch.mean(policy_loss_history).detach().numpy())
+            if len(self.policy_loss_per_epoch)>2:
+                if (self.value_loss_per_epoch[-1]>self.value_loss_per_epoch[-2]) or (self.policy_loss_per_epoch[-1]>self.policy_loss_per_epoch[-2]):
+                    print("loss increased over epoch")
+                    episodic_loss_limit+=1
+                if (self.value_loss_per_epoch[-1] < self.value_loss_per_epoch[-2]) and (
+                        self.policy_loss_per_epoch[-1] < self.policy_loss_per_epoch[-2]):
+                    print("loss decreased over epoch- reset limit")
+                    episodic_loss_limit = 0
+            if episodic_loss_limit>20:
+                print("stop training")
+                break
+
+
             self.reward_per_epoch = []
             if ep % self.summary_freq == 0:
                 self.update_averages(episode_rewards, all_total_rewards)
@@ -296,15 +338,19 @@ class Actor(nn.Module):
             # compute reward statistics for this batch and log
             avg_reward = np.mean(episode_rewards)
             sigma_reward = np.sqrt(np.var(episode_rewards) / len(episode_rewards))
-            msg = "Average reward: {:04.2f} +/- {:04.2f}".format(
+            total_average.append(self.env.net_worth)
+            msg = "Episode number: {} Average reward: {:04.2f} +/- {:04.2f}".format(ep,
                 avg_reward, sigma_reward
             )
             average_total_rewards.append(avg_reward)
             # self.env.writer.add_scalar("Average reward / epoch", avg_reward, ep)
             self.reward_per_epoch.append(avg_reward)
             self.logger.info(msg)
-            avg=np.average(average_total_rewards)
-            print("net worth {} {:.2f} {:.2f} {}".format(ep, self.env.net_worth, avg, self.env.episode_orders))
+            avg=np.average(total_average)
+            # print("net worth {} {:.2f} {:.2f} {}".format(ep, self.env.net_worth, avg, self.env.episode_orders))
+            print(
+                "episode: {:<5} net worth {:<7.2f} average: {:<7.2f} orders: {}".format(ep, self.env.net_worth, avg,
+                                                                                        self.env.episode_orders))
             # if ep > len(average_total_rewards):
             if best_avg < avg:
                 best_avg = avg
@@ -325,13 +371,13 @@ class Actor(nn.Module):
         self.value_loss_per_epoch,
             "value_loss",
             self.env.env_name,
-            self.output_path+"/value_loss",
+            self.output_path+"/{}_value_loss".format(self.net_type)
         )
         export_plot(
             self.policy_loss_per_epoch,
             "policy_loss",
             self.env.env_name,
-            self.output_path+"/policy_loss",
+            self.output_path+"/{}_policy_loss".format(self.net_type)
         )
     def act(self, state):
         # print(np.expand_dims(state, axis=0).shape)
@@ -361,23 +407,41 @@ class Actor(nn.Module):
         self.loss.backward()
         self.optimizer.step()
 
-    def test_agent(self, visualize=True, test_episodes=10):
+    def test_agent(self, env, visualize=True, test_episodes=10, folder="", name="Crypto_trader", comment=""):
         # env.Actor=torch.load("Crypto_trader_Actor.h5")
         # env.Actor.Critic=torch.load("Crypto_trader_Critic.h5")
         average_net_worth = 0
+        average_orders = 0
+        no_profit_episodes = 0
         for episode in range(test_episodes):
             print(episode)
-            state = self.env.reset()
+            state = env.reset()
             while True:
-                self.env.render(visualize)
+                env.render(visualize)
                 action, log_proba, prediction = self.act(state)
-                state, reward, done, _ = self.env.step(action)
-                if self.env.current_step == self.env.end_step or done:
-                    average_net_worth += self.env.net_worth
-                    print("net_worth:", episode, self.env.net_worth, self.env.episode_orders)
+                state, reward, done = env.step(action)
+                if env.current_step == env.end_step or done:
+                    average_net_worth += env.net_worth
+                    average_orders += env.episode_orders
+                    print("episode: {:<5}, net_worth: {:<7.2f}, average_net_worth: {:<7.2f}, orders: {}".format(episode,
+                                                                                                                env.net_worth,
+                                                                                                                average_net_worth / (
+                                                                                                                        episode + 1),
+                                                                                                                env.episode_orders))
                     break
 
-        print("average {} episodes agent net_worth: {}".format(test_episodes, average_net_worth / test_episodes))
+        print("average {} episodes agent net_worth: {}, orders: {}".format(test_episodes,
+                                                                           average_net_worth / test_episodes,
+                                                                           average_orders / test_episodes))
+        print("No profit episodes: {}".format(no_profit_episodes))
+        # save test results to test_results.txt file
+        with open("test_results.txt", "a+") as results:
+            current_date = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+            results.write(f'{current_date}, {name}, test episodes:{test_episodes}')
+            results.write(
+                f', net worth:{average_net_worth / (episode + 1)}, orders per episode:{average_orders / test_episodes}')
+            results.write(', no profit episodes:{}, model: {}, comment: {}\n'.format(no_profit_episodes, self.net_type, comment))
+
 
 class Critic(nn.Module):
     def __init__(self, env, n_layers, layer_size, learning_rate, net_type):
@@ -429,11 +493,35 @@ class Critic(nn.Module):
             net.append(nn.Linear(size, size))
             net.append(nn.ReLU())
             net.append(nn.Linear(size, output_size))
-        elif net_type.lower()=="cnn":
-            net = [nn.GRU(math.prod(input_shape), size, n_layers=2, batch_first=True)]
-            net.append(nn.Linear(size, size))
-            net.append(nn.ReLU())
-            net.append(nn.Linear(size, output_size))
+        elif net_type.lower() == "cnn":
+
+            class extract_tensor(nn.Module):
+                def forward(self, x):
+                    print(x.shape)
+                    return x
+            class flatten_tensor(nn.Module):
+                def forward(self, x):
+                    if len(x.shape)>2:
+                        x=x.reshape((x.shape[0],1,-1))
+                    else:
+                        x=x.reshape((1,-1))
+                    return x
+
+            net=[nn.Conv1d(in_channels=self.env.lookback_window_size,
+                      out_channels=64,
+                      kernel_size=6, stride=3,
+                      padding=4, dilation=1),
+                 nn.MaxPool1d(kernel_size=3, padding=1, dilation=1, stride=2),
+                 nn.Conv1d(in_channels=64,
+                      out_channels=64,
+                      kernel_size=4, stride=2,
+                      padding=3),
+                 nn.MaxPool1d(kernel_size=2, stride=2, padding=0, dilation=1),
+                 flatten_tensor(),
+                 nn.Linear(128, size),
+                 nn.ReLU(),
+                 nn.Linear(size, output_size)]
+
 
         self.network=nn.Sequential(*net)
         self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)

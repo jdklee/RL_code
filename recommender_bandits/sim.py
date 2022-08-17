@@ -102,6 +102,15 @@ class Simulator:
 			The new arm ID should be the next integer in the sequence of arm IDs
 			Don't forget to update self.num_arms
 			'''
+			count_dict=Counter([x[1] for x in self.logs])
+			if len(count_dict)<2:
+				return False
+			pop_arms=sorted(count_dict, key=count_dict.get, reverse=True)[:2]
+			thetas=[self.arms[pop_arms[i]] for i in pop_arms]
+			mean_theta=np.mean(thetas, axis=0)
+			self.arms[self.num_arms]=mean_theta
+			self.num_arms+=1
+
 			#######################################################
 			#########   YOUR CODE HERE - ~8 lines.   #############
 			#######################################################
@@ -117,6 +126,22 @@ class Simulator:
 			The new arm ID should be the next integer in the sequence of arm IDs
 			Don't forget to update self.num_arms
 			'''
+			wrong_count=0
+			best_arm_count={}
+			for i in range(self.num_arms):
+				best_arm_count[i]=0
+			for [uid, chosen, best] in self.logs:
+				if chosen!=best:
+					wrong_count+=1
+					best_arm_count[best]+=1
+			theta=np.zeros_like(self.arms[0])
+			for arm in range(self.num_arms):
+				theta += best_arm_count[arm]/wrong_count * self.arms[arm]
+
+			self.arms[self.num_arms]=theta
+			self.num_arms+=1
+
+
 			#######################################################
 			#########   YOUR CODE HERE - ~7 lines.   #############
 			#######################################################
@@ -133,6 +158,7 @@ class Simulator:
 			The new ID should be the next integer in the sequence of arm IDs
 			Don't forget to update self.num_arms
 			'''
+
 			#######################################################
 			#########   YOUR CODE HERE - ~9 lines.   #############
 			#######################################################

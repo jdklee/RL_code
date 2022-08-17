@@ -23,8 +23,15 @@ class LinUCB:
 		Keep track of a seperate A, b for each arm (this is what the Disjoint in the algorithm name means)
 		You may also want to keep track of the number of features to add new parameters for new arms
 		"""
-		#######################################################
+		self.num_arms=num_arms
+		self.num_features=num_features
+		self.alpha=alpha
+		self.A = [np.identity(num_features) for _ in range(num_arms)]
+		self.b = [np.zeros((num_features, 1)) for _ in range(num_arms)]
+
+	#######################################################
 		#########   YOUR CODE HERE - ~4 lines.   #############
+
 		#######################################################
 		#########          END YOUR CODE.          ############
 		

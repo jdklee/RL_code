@@ -33,7 +33,10 @@ class custonEnv(gym.Env):
         self.crypto_sold = 0
         self.crypto_bought = 0
         self.episode_orders = 0
+        self.punish_value = 0
         self.visualization = TradingGraph(render_range=self.render_range)
+        # self.rewards = deque(maxlen=self.Render_range)
+        self.punish_value=0
         self.trades=deque(maxlen=self.render_range)
 
 
@@ -66,7 +69,24 @@ class custonEnv(gym.Env):
 
 
 
-
+    def get_reward(self):
+        self.punish_value += self.net_worth * 0.00001
+        if self.episode_orders > 1 and self.episode_orders > self.prev_episode_orders:
+            self.prev_episode_orders = self.episode_orders
+            if self.trades[-1]['type'] == "buy" and self.trades[-2]['type'] == "sell":
+                reward = self.trades[-2]['total']*self.trades[-2]['current_price'] - self.trades[-2]['total']*self.trades[-1]['current_price']
+                reward -= self.punish_value
+                self.punish_value = 0
+                self.trades[-1]["Reward"] = reward
+                return reward
+            elif self.trades[-1]['type'] == "sell" and self.trades[-2]['type'] == "buy":
+                reward = self.trades[-1]['total']*self.trades[-1]['current_price'] - self.trades[-2]['total']*self.trades[-2]['current_price']
+                reward -= self.punish_value
+                self.punish_value = 0
+                self.trades[-1]["Reward"] = reward
+                return reward
+        else:
+            return 0 - self.punish_value
     def step(self, action):
         self.crypto_sold = 0
         self.crypto_bought = 0
@@ -109,7 +129,12 @@ class custonEnv(gym.Env):
 
             write_to_file(date, order)
 
-            reward = self.net_worth - self.prev_net_worth
+            if action==0:
+                self.punish_value += self.net_worth * 0.00001
+                reward= self.net_worth - self.prev_net_worth - self.punish_value
+
+            else:
+                reward = self.net_worth - self.prev_net_worth
 
             if self.net_worth <= self.initial_balance / 2:
                 done = True
@@ -175,12 +200,12 @@ def Random_games(env, train_episodes=50, training_batch_size=500):
                 break
 
     print("average_net_worth:", average_net_worth / train_episodes)
-df = pd.read_csv('./ETH_1H_clean.csv')
+df = pd.read_csv('./ETHUSD_1h.csv')
 df = df.sort_values('Date')
 
 lookback_window_size = 30
-train_df = df[:-720-lookback_window_size]
-test_df = df[-720-lookback_window_size:] # 30 days
+train_df = df[:-720*2-lookback_window_size]
+test_df = df[-720*2-lookback_window_size:] # 60 days
 
 
 

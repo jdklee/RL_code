@@ -5,11 +5,12 @@ import math
 import numpy as np
 from collections import deque
 import matplotlib
+import pandas as pd
 
 matplotlib.use("agg")
 import matplotlib.pyplot as plt
 import torch
-
+from scipy.interpolate import make_interp_spline
 
 def export_plot(ys, ylabel, title, filename):
     """
@@ -20,7 +21,16 @@ def export_plot(ys, ylabel, title, filename):
         filename: (string) directory
     """
     plt.figure()
-    plt.plot(range(len(ys)), ys)
+    x=np.array(range(len(ys)))
+    y=ys
+    roll=pd.Series(y).rolling(window=3)
+    rolling_mean=roll.mean()
+
+    plt.plot(x[3:],rolling_mean[3:])
+    # X_Y_Spline = make_interp_spline(x,y)
+    # X_=np.linspace(x.min(),x.max(), 500)
+    # Y_=X_Y_Spline(X_)
+    # plt.plot(X_, Y_)
     plt.xlabel("Training Episode")
     plt.ylabel(ylabel)
     plt.title(title)
