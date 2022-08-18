@@ -54,14 +54,14 @@ class critic(torch.nn.Module):
 class actor(torch.nn.Module):
         def __init__(self, gamma, actor_learning_rate, critic_learning_rate,
                      net_type, state_space, action_space, size, n_layers, ppo=False,
-                     discrete_action=False, discrete_state=False):
+                     continuous_action=False, continuous_state=False):
             super().__init__()
             self.lr=actor_learning_rate
             self.critic_lr=critic_learning_rate
             self.net_type=net_type
             self.ppo=ppo
-            self.discrete_action=discrete_action
-            self.discrete_state=discrete_state
+            self.continuous_action=continuous_action
+            self.continuous_state=continuous_state
             self.action_dim = (
                 self.env.action_space.n if self.discrete_action else self.env.action_space.shape[0]
             )
@@ -89,7 +89,7 @@ class actor(torch.nn.Module):
         def get_action(self,state):
             logits=self.forward(state)
 
-            if not self.discrete_action:
+            if not self.continuous_action:
                 distribution = torch.distributions.Categorical(logits=logits)
                 sampled_action = distribution.sample()
                 log_proba = distribution.log_prob(sampled_action).detach().numpy()

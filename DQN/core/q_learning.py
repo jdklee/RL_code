@@ -386,7 +386,7 @@ class QN(object):
         Re create an env and record a video for one episode
         """
         env = gym.make(self.config.env_name)
-        env = gym.wrappers.Monitor(env, self.config.record_path, video_callable=lambda x: True, resume=True)
+        # env = gym.wrappers.Monitor(env, self.config.record_path, video_callable=lambda x: True, resume=True)
         env = MaxAndSkipEnv(env, skip=self.config.skip_frame)
         env = PreproWrapper(env, prepro=greyscale, shape=(80, 80, 1), 
                         overwrite_render=self.config.overwrite_render)

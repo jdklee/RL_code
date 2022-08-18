@@ -488,11 +488,11 @@ class Critic(nn.Module):
             net.append(nn.ReLU())
             net.append(nn.Linear(size, output_size))
 
-        elif net_type.lower()=="gru":
-            net = [nn.GRU(math.prod(input_shape), size, n_layers=2, batch_first=True)]
-            net.append(nn.Linear(size, size))
-            net.append(nn.ReLU())
-            net.append(nn.Linear(size, output_size))
+        # elif net_type.lower()=="gru":
+        #     net = [nn.GRU(math.prod(input_shape), size, n_layers=2, batch_first=True)]
+        #     net.append(nn.Linear(size, size))
+        #     net.append(nn.ReLU())
+        #     net.append(nn.Linear(size, output_size))
         elif net_type.lower() == "cnn":
 
             class extract_tensor(nn.Module):

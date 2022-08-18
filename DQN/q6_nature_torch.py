@@ -32,14 +32,6 @@ class NatureQN(Linear):
         To simplify, we specify the paddings as:
             (stride - 1) * img_height - stride + filter_size) // 2
 
-        Hints:
-            1. Simply setting self.target_network = self.q_network is incorrect.
-            2. The following functions might be useful
-                - nn.Sequential
-                - nn.Conv2d
-                - nn.ReLU
-                - nn.Flatten
-                - nn.Linear
 The exact architecture, shown schematically in Fig. 1, is as follows. The input to the neural network consists of an
 84 x 84 x 4 image produced by the preprocessing map phi_.
 The first hidden layer convolves 32 filters of 8 x 8 with stride 4 with the input image and applies a rectifier nonlinearity
@@ -52,9 +44,6 @@ The number of valid actions varied between 4 and 18 on the games we considered.
         state_shape = list(self.env.observation_space.shape)
         img_height, img_width, n_channels = state_shape
         num_actions = self.env.action_space.n
-
-        ##############################################################
-        ################ YOUR CODE HERE - 25-30 lines lines ################
 
         self.q_network = nn.Sequential(
             nn.Conv2d(in_channels=n_channels*self.config.state_history,
@@ -99,9 +88,6 @@ The number of valid actions varied between 4 and 18 on the games we considered.
             nn.Linear(512, num_actions)
         )
 
-        ##############################################################
-        ######################## END YOUR CODE #######################
-
     def get_q_values(self, state, network):
         """
         Returns Q values for all actions
@@ -114,32 +100,14 @@ The number of valid actions varied between 4 and 18 on the games we considered.
 
         Returns:
             out: (torch tensor) of shape = (batch_size, num_actions)
-
-        Hint:
-            1. What are the input shapes to the network as compared to the "state" argument?
-            2. You can forward a tensor through a network by simply calling it (i.e. network(tensor))
         """
-        # print(torch.reshape(state, (1,24,8,8)))
-        # print(torch.reshape(state, (1,24,8,8)).shape)
-        # newstate=torch.reshape(state, (1,24,8,8))
-        # print(state[0])
-        # print(torch.tensor(state[0].T).shape)
-        # print(state.T.shape)
 
         x=torch.stack([state[i].T for i in range(len(state))])
-        # print(x.shape)
         if network=="q_network":
             out=self.q_network(x)
         else:
             out=self.target_network(x)
-        # out = None
 
-        ##############################################################
-        ################ YOUR CODE HERE - 4-5 lines lines ################
-
-
-        ##############################################################
-        ######################## END YOUR CODE #######################
         return out
 
 

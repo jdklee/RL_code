@@ -15,9 +15,6 @@ from configs.q5_linear import config
 
 
 class Linear(DQN):
-    """
-    Implement Fully Connected with Tensorflow
-    """
     def initialize_models(self):
         """Creates the 2 separate networks (Q network and Target network). The input
         to these models will be an img_height * img_width image
@@ -26,22 +23,15 @@ class Linear(DQN):
         1. Set self.q_network to be a linear layer with num_actions as the output size
         2. Set self.target_network to be the same configuration self.q_network but initialized from scratch
         3. What is the input size of the model?
-
-        Hints:
-            1. Simply setting self.target_network = self.q_network is incorrect.
-            2. Look up nn.Linear
         """
         # this information might be useful
         state_shape = list(self.env.observation_space.shape)
         img_height, img_width, n_channels = state_shape
         num_actions = self.env.action_space.n
 
-        ##############################################################
-        ################ YOUR CODE HERE (2 lines) ##################
         self.q_network=torch.nn.Linear(img_height*img_width*n_channels*self.config.state_history, num_actions)
         self.target_network = torch.nn.Linear(img_height*img_width*n_channels*self.config.state_history, num_actions)
-        ##############################################################
-        ######################## END YOUR CODE #######################
+
 
 
     def get_q_values(self, state, network='q_network'):
@@ -56,24 +46,12 @@ class Linear(DQN):
 
         Returns:
             out: (torch tensor) of shape = (batch_size, num_actions)
+            """
 
-        Hint:
-            1. Look up torch.flatten
-            2. You can forward a tensor through a network by simply calling it (i.e. network(tensor))
-        """
-
-        # batch_size, img_height, img_width, n_channels = state.shape[0], state.shape[1], state.shape[2],state.shape[3]
-        # input_=state[1]*state[2]*state[3]
         if network=="q_network":
             out= self.q_network(torch.flatten(state, start_dim=1))
         else:
             out= self.target_network(torch.flatten(state, start_dim=1))
-        # print(out)
-        ##############################################################
-        ################ YOUR CODE HERE - 3-5 lines ##################
-
-        ##############################################################
-        ######################## END YOUR CODE #######################
 
         return out
 
@@ -88,19 +66,11 @@ class Linear(DQN):
 
         Periodically, we need to update all the weights of the Q network
         and assign them with the values from the regular network.
-
-        Hint:
-            1. look up saving and loading pytorch models
         """
 
-        ##############################################################
-        ################### YOUR CODE HERE - 1-2 lines ###############
         torch.save(self.q_network, "q_network_weights")
         self.target_network=torch.load("q_network_weights")
 
-
-        ##############################################################
-        ######################## END YOUR CODE #######################
 
 
     def calc_loss(self, q_values : Tensor, target_q_values : Tensor,
@@ -123,13 +93,6 @@ class Linear(DQN):
                 The rewards that you actually got at each step (i.e. r)
             done_mask: (torch tensor) shape = (batch_size,)
                 A boolean mask of examples where we reached the terminal state
-
-        Hint:
-            You may find the following functions useful
-                - torch.max
-                - torch.sum
-                - torch.nn.functional.one_hot
-                - torch.nn.functional.mse_loss
         """
         # you may need this variable
         num_actions = self.env.action_space.n
@@ -142,37 +105,16 @@ class Linear(DQN):
         q_sa=torch.sum(q_values*actions_taken, dim=1)
 
         loss=torch.nn.functional.mse_loss(q_samp, q_sa)
-        # print(loss)
-        if loss>10:
-            print(loss)
-            return
-        # # print(loss)
         return loss
 
 
-
-        ##############################################################
-        ##################### YOUR CODE HERE - 3-5 lines #############
-
-        ##############################################################
-        ######################## END YOUR CODE #######################
-
-
-    def add_optimizer(self):
+    def add_optimizer(self, lr=0.00001):
         """
         Set self.optimizer to be an Adam optimizer optimizing only the self.q_network
         parameters
-
-        Hint:
-            - Look up torch.optim.Adam
-            - What are the input to the optimizer's constructor?
         """
-        ##############################################################
-        #################### YOUR CODE HERE - 1 line #############
-        self.optimizer=torch.optim.Adam(self.q_network.parameters(), lr=0.00001)
+        self.optimizer=torch.optim.Adam(self.q_network.parameters(), lr=lr)
 
-        ##############################################################
-        ######################## END YOUR CODE #######################
 
 
 

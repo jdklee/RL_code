@@ -25,29 +25,16 @@ class LinearSchedule(object):
         Args:
             t: int
                 frame number
+
+          modifies self.epsilon such that
+          it is a linear interpolation from self.eps_begin to
+          self.eps_end as t goes from 0 to self.nsteps
+          For t > self.nsteps self.epsilon remains constant
         """
-        ##############################################################
-        """
-        TODO: modify self.epsilon such that
-			  it is a linear interpolation from self.eps_begin to
-			  self.eps_end as t goes from 0 to self.nsteps
-			  For t > self.nsteps self.epsilon remains constant
-        """
-        # print(self.eps_begin)
-        # print(self.eps_end)
-        # diff=self.eps_begin- self.eps_end
-        # if t <= self.nsteps:
-        #     self.epsilon-= diff * t / self.nsteps
-        # elif t > self.nsteps:
-        #     self.epsilon=self.eps_end
         value = np.linspace(self.eps_end, self.eps_begin, int(self.nsteps)+1)
-        #if t > self.nsteps:
-        #    self.epsilon = self.eps_end
-        #else:
-        #    self.epsilon = value[t]
+
         self.epsilon = value[t] if t <= self.nsteps else self.eps_end
-        ##############################################################
-        ################ YOUR CODE HERE - 3-4 lines ##################
+
 
 
 
@@ -77,25 +64,16 @@ class LinearExploration(LinearSchedule):
         Returns:
             an action
         """
-        ##############################################################
         """
-        TODO: with probability self.epsilon, return a random action
-                else, return best_action
-
-                you can access the environment via self.env
-
-                you may use env.action_space.sample() to generate
-                a random action
+        Functionality:
+                with probability self.epsilon, return a random action
+                else, return best_action. Access env via self.env
+                Generate a random action using self.env.action_space.sample()
         """
-        ##############################################################
-        ################ YOUR CODE HERE - 4-5 lines ##################
         if random.random() < self.epsilon:
             return self.env.action_space.sample()
         else:
             return best_action
-        ##############################################################
-        ######################## END YOUR CODE #######################
-
 
 
 def test1():
@@ -128,15 +106,8 @@ def test3():
     print("Test3: ok")
 
 
-def your_test():
-    """
-    Use this to implement your own tests if you'd like (not required)
-    """
-    pass
-
 
 if __name__ == "__main__":
     test1()
     test2()
     test3()
-    your_test()

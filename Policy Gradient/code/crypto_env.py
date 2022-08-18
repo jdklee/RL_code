@@ -3,7 +3,7 @@ import random
 import gym
 import numpy as np
 import pandas as pd
-# from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 from utils import write_to_file, TradingGraph
 from crypto_model_ppo import *
@@ -33,10 +33,7 @@ class custonEnv(gym.Env):
         self.crypto_sold = 0
         self.crypto_bought = 0
         self.episode_orders = 0
-        self.punish_value = 0
         self.visualization = TradingGraph(render_range=self.render_range)
-        # self.rewards = deque(maxlen=self.Render_range)
-        self.punish_value=0
         self.trades=deque(maxlen=self.render_range)
 
 
@@ -60,33 +57,16 @@ class custonEnv(gym.Env):
                                         self.df.loc[current_step, "Volume"]])
 
         # Initial State returned
-        state = np.concatenate((self.market_history, self.orders_history), axis=1)
+        state = np.concatenate((self.market_history, self.orders_history), axis=1).flatten()
 
         return state
-    # def create_writer(self):
-    #     self.replay_count = 0
-    #     self.writer = SummaryWriter(comment="Crypto_trader")
+    def create_writer(self):
+        self.replay_count = 0
+        self.writer = SummaryWriter(comment="Crypto_trader")
 
 
 
-    def get_reward(self):
-        self.punish_value += self.net_worth * 0.00001
-        if self.episode_orders > 1 and self.episode_orders > self.prev_episode_orders:
-            self.prev_episode_orders = self.episode_orders
-            if self.trades[-1]['type'] == "buy" and self.trades[-2]['type'] == "sell":
-                reward = self.trades[-2]['total']*self.trades[-2]['current_price'] - self.trades[-2]['total']*self.trades[-1]['current_price']
-                reward -= self.punish_value
-                self.punish_value = 0
-                self.trades[-1]["Reward"] = reward
-                return reward
-            elif self.trades[-1]['type'] == "sell" and self.trades[-2]['type'] == "buy":
-                reward = self.trades[-1]['total']*self.trades[-1]['current_price'] - self.trades[-2]['total']*self.trades[-2]['current_price']
-                reward -= self.punish_value
-                self.punish_value = 0
-                self.trades[-1]["Reward"] = reward
-                return reward
-        else:
-            return 0 - self.punish_value
+
     def step(self, action):
         self.crypto_sold = 0
         self.crypto_bought = 0
@@ -96,16 +76,10 @@ class custonEnv(gym.Env):
             date = self.df.loc[self.current_step, "Date"]
             high = self.df.loc[self.current_step, "High"]
             low = self.df.loc[self.current_step,"Low"]
-            # print("date,high,low found")
-            # print("")
-            # print("0")
-            # print(action)
 
             if action == 0:
-                # print("act")
                 pass
             if action == 1:  # buy with all balance
-                # print("act")
                 self.crypto_bought = self.balance / current_price
                 self.balance -= self.crypto_bought * current_price
                 self.crypto_held += self.crypto_bought
@@ -114,27 +88,20 @@ class custonEnv(gym.Env):
                 self.trades.append({"Date":date, "High":high, "Low":low, "total":self.crypto_bought, "type":"buy"})
 
             elif action == 2:  # sell with all balance
-                # print("act")
                 self.crypto_sold = self.crypto_held
                 self.crypto_held -= self.crypto_sold
                 self.balance += self.crypto_sold * current_price
                 self.episode_orders += 1
                 self.trades.append({"Date":date, "High":high, "Low":low, "total":self.crypto_bought, "type":"sell"})
-            # print("1")
+
             self.prev_net_worth = self.net_worth
             self.net_worth = self.balance + self.crypto_held * current_price
             order = [self.balance, self.net_worth, self.crypto_bought, self.crypto_sold, self.crypto_held]
             self.orders_history.append(order)
-            # print("2")
 
             write_to_file(date, order)
 
-            if action==0:
-                self.punish_value += self.net_worth * 0.00001
-                reward= self.net_worth - self.prev_net_worth - self.punish_value
-
-            else:
-                reward = self.net_worth - self.prev_net_worth
+            reward = self.net_worth - self.prev_net_worth
 
             if self.net_worth <= self.initial_balance / 2:
                 done = True
@@ -143,15 +110,12 @@ class custonEnv(gym.Env):
 
             state = self._next_observation()
 
-            return state, reward, done
+            return state, reward, done, None
 
-
-        except Exception as e:
-            print("DAMN")
-            print(e)
-            # print(self.current_step)
-            # print(self.lookback_window)
-            # print(self.df_total_steps)
+        except:
+            print(self.current_step)
+            print(self.lookback_window)
+            print(self.df_total_steps)
 
     def _next_observation(self):
         self.market_history.append([self.df.loc[self.current_step, 'Open'],
@@ -160,7 +124,7 @@ class custonEnv(gym.Env):
                                     self.df.loc[self.current_step, "Close"],
                                     self.df.loc[self.current_step, "Volume"]])
 
-        state = np.concatenate((self.market_history, self.orders_history), axis=1)
+        state = np.concatenate((self.market_history, self.orders_history), axis=1).flatten()
         return state
 
     def render(self, visualize=False):
@@ -200,12 +164,12 @@ def Random_games(env, train_episodes=50, training_batch_size=500):
                 break
 
     print("average_net_worth:", average_net_worth / train_episodes)
-df = pd.read_csv('./ETHUSD_1h.csv')
+df = pd.read_csv('./eth_data.csv')
 df = df.sort_values('Date')
 
 lookback_window_size = 30
-train_df = df[:-720*2-lookback_window_size]
-test_df = df[-720*2-lookback_window_size:] # 60 days
+train_df = df[:-720-lookback_window_size]
+test_df = df[-720-lookback_window_size:] # 30 days
 
 
 
@@ -213,7 +177,7 @@ train_env = custonEnv(train_df, lookback_window=lookback_window_size)
 test_env = custonEnv(test_df, lookback_window=lookback_window_size)
 
 Actor=Actor(env=train_env, input_shape=train_env.state_shape, gamma=0.9, action_space=train_env.actions, lr=0.00001,
-            n_layers=10, size=512, batch_size=500, logger=None, output_path="output", net_type="lstm")
-Actor.train(visualize=False, train_episodes=500, training_batch_size=500)
-# Actor.test_agent()
+            n_layers=10, size=512, batch_size=500, logger=None, output_path="output")
+Actor.train(visualize=False, train_episodes=1500, training_batch_size=500)
+Actor.test_agent()
 # Random_games(train_env, train_episodes = 10, training_batch_size=500)
