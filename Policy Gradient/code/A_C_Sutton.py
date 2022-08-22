@@ -276,9 +276,47 @@ class Actor_critic_agent(torch.nn.Module):
     def train_agent(self):
         self.actor.train()
         self.actor.critic.train()
+        done=False
+        # done = False
+        state = self.env.reset()
+        score=0
+        states, actions, rewards, log_probs, values = [],[],[],[], []
+        while not done:
+            state=torch.FloatTensor(state).unsqueeze(0)
+            states.append(state)
+            action_pred, value_pred = self.forward(state)
+            logits=torch.nn.functional.softmax(action_pred, dim=-1)
+            if not self.discrete_actions:
+                dist=torch.distributions.Categorical(logits)
+
+            else:
+                log_std = torch.nn.Parameter(torch.zeros(size=[self.action_space]))
+                std = np.exp(log_std.detach().numpy())
+                std = np2torch(std)
+                dist = torch.distributions.MultivariateNormal(loc=logits,
+                                                                      scale_tril=torch.diag(std))
+            action = dist.sample()
+            log_prob = dist.log_prob(action)
+            value=self.actor.critic(state)
+            actions.append(action)
+            log_probs.append(log_prob)
+            state, reward, done, info = self.env.step(action.item())
+            rewards.append(reward)
+            values.append(value)
+            score+=reward
+
+        states=torch.cat(states)
+        actions=torch.cat(actions)
+        log_probs=torch.cat(log_probs)
+        values=torch.cat(values).squeeze(-1)
+        returns = self.calculate_returns(rewards)
+        advantages = self.calculate_advantage(returns, values)
+        policy_loss, value_loss = self.update_network(states, actions, log_probs, advantages, returns)
+
+        return policy_loss, value_loss, score
 
 
-        states, actions, log_probs, values, returns, advantages, score = self.collect_path()
+    def update_network(self,states, actions, log_probs, advantages, returns):
         advantages = advantages.detach()
         log_probs = log_probs.detach()
         actions = actions.detach()
@@ -300,7 +338,7 @@ class Actor_critic_agent(torch.nn.Module):
             new_log_prob_from_old_actions=dist.log_prob(actions)
             ratio=(new_log_prob_from_old_actions-log_probs).exp()
             loss1=ratio*advantages
-            loss2=torch.clamp(ratio, 1-self.ppo_clip, 1+self.ppo_clip)
+            loss2=torch.clamp(ratio, 1-self.ppo_clip, 1+self.ppo_clip)*advantages
             policy_loss = (-torch.min(loss2, loss1)).sum()
 
             #calculate value loss
@@ -316,7 +354,7 @@ class Actor_critic_agent(torch.nn.Module):
             total_value_loss+=value_loss.item()
             total_policy_loss+=policy_loss.item()
 
-        return total_policy_loss/self.ppo_steps, total_value_loss/self.ppo_steps, score
+        return total_policy_loss/self.ppo_steps, total_value_loss/self.ppo_steps
 
     def test_agent(self, test_env):
         self.actor.eval()
@@ -365,11 +403,8 @@ LEARNING_RATE=0.01
 actor=actor( gamma=DISCOUNT_FACTOR, actor_learning_rate=LEARNING_RATE, critic_learning_rate=LEARNING_RATE,
                       state_space=train_env.observation_space.shape[0], size=128, n_layers=2, action_space=train_env.action_space.n, ppo=True)
 critic=actor.critic
-# self.actor.apply(self.init_weights)
-# self.actor.critic.apply(self.init_weights)
 A_C_Agent=Actor_critic_agent(env=train_env, actor=actor, critic=critic)
 A_C_Agent.apply(init_weights)
-                 # eligibility_trace=False, ppo=True)
 train_rewards = []
 test_rewards = []
 for episode in range(1, MAX_EPISODES+1):
