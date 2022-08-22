@@ -19,12 +19,10 @@ class PolicyGradient(object):
     def __init__(self, env, config, seed, logger=None):
         """
         Initialize Policy Gradient Class
-
         Args:
                 env: an OpenAI Gym environment
                 config: class with hyperparameters
                 logger: logger instance from the logging module
-
         You do not need to implement anything in this function. However,
         you will need to use self.discrete, self.observation_dim,
         self.action_dim, and self.lr in other methods.
@@ -106,7 +104,6 @@ class PolicyGradient(object):
         """
         Update the averages.
         You don't have to change or use anything here.
-
         Args:
             rewards: deque
             scores_eval: list
@@ -124,19 +121,16 @@ class PolicyGradient(object):
     def sample_path(self, env, num_episodes=None):
         """
         Sample paths (trajectories) from the environment.
-
         Args:
             num_episodes: the number of episodes to be sampled
                 if none, sample one batch (size indicated by config file)
             env: open AI Gym envinronment
-
         Returns:
             paths: a list of paths. Each path in paths is a dictionary with
                 path["observation"] a numpy array of ordered observations in the path
                 path["actions"] a numpy array of the corresponding actions in the path
                 path["reward"] a numpy array of the corresponding rewards in the path
             total_rewards: the sum of all rewards encountered during this "path"
-
         You do not have to implement anything in this function, but you will need to
         understand what it returns, and it is worthwhile to look over the code
         just so you understand how we are taking actions in the environment
@@ -181,24 +175,17 @@ class PolicyGradient(object):
     def get_returns(self, paths):
         """
         Calculate the returns G_t for each timestep
-
         Args:
             paths: recorded sample paths. See sample_path() for details.
-
         Return:
             returns: return G_t for each timestep
-
         After acting in the environment, we record the observations, actions, and
         rewards. To get the advantages that we need for the policy update, we have
         to convert the rewards into returns, G_t, which are themselves an estimate
         of Q^π (s_t, a_t):
-
            G_t = r_t + γ r_{t+1} + γ^2 r_{t+2} + ... + γ^{T-t} r_T
-
         where T is the last timestep of the episode.
-
         Note that here we are creating a list of returns for each path
-
         TODO: compute and return G_t for each timestep. Use self.config.gamma.
         """
 
@@ -237,12 +224,10 @@ class PolicyGradient(object):
             advantages: np.array of shape [batch size]
         Returns:
             normalized_advantages: np.array of shape [batch size]
-
         TODO:
         Normalize the advantages so that they have a mean of 0 and standard
         deviation of 1. Put the result in a variable called
         normalized_advantages (which will be returned).
-
         Note:
         This function is called only if self.config.normalize_advantage is True.
         """
@@ -302,7 +287,6 @@ class PolicyGradient(object):
                 [batch size, dim(action space)] if continuous
                 [batch size] (and integer type) if discrete
             advantages: np.array of shape [batch size]
-
         Perform one update on the policy using the provided data.
         To compute the loss, you will need the log probabilities of the actions
         given the observations. Note that the policy's action_distribution
@@ -310,7 +294,6 @@ class PolicyGradient(object):
         torch.distributions.Distribution, and that object can be used to
         compute log probabilities.
         See https://pytorch.org/docs/stable/distributions.html#distribution
-
         Note:
         PyTorch optimizers will try to minimize the loss you compute, but you
         want to maximize the policy's performance.
@@ -333,7 +316,6 @@ class PolicyGradient(object):
     def train(self):
         """
         Performs training
-
         You do not have to change or use anything here, but take a look
         to see how all the code you've written fits together!
         """
@@ -396,7 +378,6 @@ class PolicyGradient(object):
     def train_actor_critic(self, num_episodes):
         """
         Performs training
-
         """
 
         scores=[]

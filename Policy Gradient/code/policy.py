@@ -39,7 +39,7 @@ class BasePolicy:
         actions to a numpy array, via numpy(). Put the result in a variable
         called sampled_actions (which will be returned).
         """
-        # observations = np2torch(observations)
+        observations = np2torch(observations)
         #######################################################
         #########   YOUR CODE HERE - 1-3 lines.    ############
         sampled_actions=np.zeros(observations.shape[0])
@@ -73,6 +73,7 @@ class CategoricalPolicy(BasePolicy, nn.Module):
         """
         #######################################################
         #########   YOUR CODE HERE - 1-2 lines.    ############
+        # observations=np2torch(observations)
         logits=self.network(observations)
 
         distribution=torch.distributions.Categorical(logits=logits)

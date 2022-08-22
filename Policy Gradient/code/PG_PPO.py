@@ -8,9 +8,9 @@ from general import get_logger, Progbar, export_plot
 from baseline_network import BaselineNetwork
 from network_utils import build_mlp, device, np2torch
 from policy import CategoricalPolicy, GaussianPolicy
-from tensorboardX import SummaryWriter
+# from tensorboardX import SummaryWriter
 
-class PolicyGradient(object):
+class PPO(object):
     """
     Class for implementing a general policy gradient algorithm that uses baseline to approximate value function.
     Any further, more recent algorithms like PPO or TPRO can be implemented using this setup.
@@ -40,20 +40,20 @@ class PolicyGradient(object):
         self.env.seed(self.seed)
 
         # discrete vs continuous action space
-        self.discrete = isinstance(env.action_space, gym.spaces.Discrete)
-        self.observation_dim = self.env.state_shape[0]
+        self.discrete = isinstance(self.env.action_space, gym.spaces.Discrete)
+        self.observation_dim = self.env.observation_space.shape[0]
         self.action_dim = (
             self.env.action_space.n if self.discrete else self.env.action_space.shape[0]
         )
 
         self.lr = learning_rate
         self.num_batches = 100  # number of batches trained on
-        self.batch_size = 50000  # number of steps used to compute each policy update
-        self.max_ep_len = 1000  # maximum episode length
+        self.batch_size = 64  # number of steps used to compute each policy update
+        self.max_ep_len = 500  # maximum episode length
         self.learning_rate = 3e-2
         self.gamma = 0.9  # the discount factor
 
-        self.n_layers = 2
+        self.n_layers = 4
         self.layer_size = 64
 
         self.init_policy()
@@ -61,9 +61,9 @@ class PolicyGradient(object):
         self.baseline_network = BaselineNetwork(env, n_layers=self.n_layers, layer_size=self.layer_size, learning_rate=self.lr)
         self.baseline_network.action_dim = self.action_dim
         self.baseline_network.observation_dim = self.observation_dim
-        if PPO:
-            self.n_updates_per_iteration=5
-            self.clip=0.2
+        # if PPO:
+        self.n_updates_per_iteration=5
+        self.clip=0.2
 
 
     def init_policy(self):
@@ -116,19 +116,21 @@ class PolicyGradient(object):
                 path["reward"] a numpy array of the corresponding rewards in the path
             total_rewards: the sum of all rewards encountered during this "path"
         """
+        print("sampling path")
         episode = 0
         episode_rewards = []
         paths = []
         t = 0
 
         while num_episodes or t < self.batch_size:
-            state = env.reset(env_steps_size=self.batch_size)
+            state = env.reset()
             states, actions, rewards, values, log_probs = [], [], [], [], []
             episode_reward = 0
 
             for step in range(self.max_ep_len):
+                env.render()
                 states.append(state)
-                action, log_prob = self.policy.act(states[-1][None])[0]
+                action, log_prob = self.policy.act(state)
                 log_probs.append(log_prob)
                 state, reward, done, info = env.step(action)
                 actions.append(action)
@@ -236,6 +238,7 @@ class PolicyGradient(object):
         """
         Perform one update on the policy using the provided loss
         """
+        self.policy.train()
         self.loss=loss
         self.optimizer.zero_grad()
         self.loss.backward()
@@ -247,7 +250,7 @@ class PolicyGradient(object):
         Performs training
         """
         last_record = 0
-        self.create_writer()
+        # self.create_writer()
 
         self.init_averages()
         all_total_rewards = (
@@ -274,9 +277,14 @@ class PolicyGradient(object):
             actions = np2torch(actions)
             advantages = np2torch(advantages)
             returns = np2torch(returns)
+            log_probs=np2torch(batch_log)
 
+            advantages = advantages.detach()
+            log_probs = log_probs.detach()
+            actions = actions.detach()
             # run training operations
             for _ in range(self.n_updates_per_iteration):
+                print("updating policy")
 
                 # Update policy
                 dist = self.policy.action_distribution(observations)
@@ -284,10 +292,11 @@ class PolicyGradient(object):
                 if not self.PPO:
                     policy_loss = -torch.sum(log_probabilties * advantages)
                 else:
-                    ratios = torch.exp(log_probabilties - batch_log)
+                    ratios = torch.exp(log_probabilties - log_probs)
                     surrogate_loss_1 = ratios * advantages
                     surrogate_loss_2 = torch.clamp(ratios, 1-self.clip, 1+self.clip)*advantages
-                    policy_loss=(-torch.min(surrogate_loss_2, surrogate_loss_1)).mean()
+                    policy_loss=(-torch.min(surrogate_loss_2, surrogate_loss_1)).sum()
+                    # policy_loss=torch.tensor(policy_loss, requires_grad=True)
 
                 self.update_policy(policy_loss)
 
@@ -339,16 +348,6 @@ class PolicyGradient(object):
         self.logger.info(msg)
         return avg_reward
 
-    # def record(self):
-    #     """
-    #     Recreate an env and record a video for one episode
-    #     """
-    #     env = self.env
-    #     env.seed(self.seed)
-    #     env = gym.wrappers.Monitor(
-    #         env, self.config.record_path, video_callable=lambda x: True, resume=True
-    #     )
-    #     self.evaluate(env, 1)
 
     def run(self):
         """
@@ -362,3 +361,15 @@ class PolicyGradient(object):
         # record one game at the end
         # if self.config.record:
         #     self.record()
+
+
+env = gym.make('CartPole-v1')
+agent=PPO(env, seed=15, PPO=True, logger=None, normalize_advantage_flag=True,
+                 max_ep_len=500, learning_rate=3e-2, output_path="output")
+agent.run()
+# average_reward, episodic_reward=A_C_Agent.test(10)
+# print(average_reward)
+# plt.plot(range(len(episodic_reward)), episodic_reward)
+# plt.show()
+# plt.savefig("test_episodic_score_actor_critic.png")
+# plt.close()

@@ -33,7 +33,8 @@ class BaselineNetwork(nn.Module):
 
         #######################################################
         #########   YOUR CODE HERE - 2-8 lines.   #############
-        self.observation_dim = self.env.state_shape[0]
+        self.observation_dim = self.env.observation_space.shape[0]
+        print(self.observation_dim)
         self.network =build_mlp(input_size=self.observation_dim, size=self.layer_size, n_layers=self.n_layers,
                   output_size=1)
         self.optimizer = torch.optim.Adam(self.network.parameters() ,lr=self.lr)
@@ -61,12 +62,17 @@ class BaselineNetwork(nn.Module):
         """
         #######################################################
         #########   YOUR CODE HERE - 1 lines.     #############
+        try:
+            observations=np2torch(observations)
+        except:
+            pass
         output=self.network(observations).squeeze()
         # print("output of baseline nw:",output.shape)
+        output=output.reshape([-1,1])
 
         #######################################################
         #########          END YOUR CODE.          ############
-        assert output.ndim == 1
+        # assert output.ndim == 1
         return output
 
     def calculate_advantage(self, returns, observations):
@@ -125,6 +131,7 @@ class BaselineNetwork(nn.Module):
         # print(self.forward(observations))
         # print(returns)
         # self.loss=torch.nn.functional.mse_loss(returns, self.network(observations).squeeze())
+        self.network.train()
         self.loss=loss
 
 

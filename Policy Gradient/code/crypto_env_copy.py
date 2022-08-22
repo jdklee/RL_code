@@ -172,6 +172,7 @@ class CustomEnv:
     def get_reward(self):
         self.punish_value += self.net_worth * 0.00001
         if self.episode_orders > 1 and self.episode_orders > self.prev_episode_orders:
+            # print("it passed")
             self.prev_episode_orders = self.episode_orders
             if self.trades[-1]['type'] == "buy" and self.trades[-2]['type'] == "sell":
                 reward = self.trades[-2]['total'] * self.trades[-2]['current_price'] - self.trades[-2]['total'] * \
@@ -211,18 +212,18 @@ test_df = df[-720*2-lookback_window_size:] # 60 days
 train_env = CustomEnv(train_df, lookback_window_size=lookback_window_size)
 test_env = CustomEnv(test_df, lookback_window_size=lookback_window_size, Show_reward=True, Show_indicators=True)
 
-# Actor1=Actor(env=train_env, input_shape=train_env.state_shape, gamma=0.9, action_space=train_env.actions, lr=0.00001,
-#             n_layers=10, size=512, batch_size=64,max_ep_len=500, logger=None, output_path="output", net_type="cnn")
-# Actor.train(visualize=False, train_episodes=2000, training_batch_size=64)
-# Actor.test_agent(test_env, visualize=True, test_episodes=10, folder="Crypto_trader_Result")
-
-
-Actor2=Actor(env=train_env, input_shape=train_env.state_shape, gamma=0.9, action_space=train_env.actions, lr=0.00001,
-            n_layers=10, size=512, batch_size=500,max_ep_len=500, logger=None, output_path="output", net_type="lstm")
-Actor2.train(visualize=False, train_episodes=2000, training_batch_size=500)
-# Actor.test_agent(test_env, visualize=True, test_episodes=10, folder="Crypto_trader_Result")
-
-Actor3=Actor(env=train_env, input_shape=train_env.state_shape, gamma=0.9, action_space=train_env.actions, lr=0.00001,
-            n_layers=10, size=512, batch_size=500,max_ep_len=500, logger=None, output_path="output", net_type="linear")
-Actor.train(visualize=False, train_episodes=2000, training_batch_size=500)
+Actor1=Actor(env=train_env, input_shape=train_env.state_shape, gamma=0.9, action_space=train_env.actions, lr=0.00001,
+            n_layers=10, size=512, batch_size=64,max_ep_len=500, logger=None, output_path="output", net_type="cnn")
+Actor1.train(visualize=False, train_episodes=500, training_batch_size=64)
+Actor1.test_agent(test_env, visualize=True, test_episodes=10, folder="Crypto_trader_Result")
+#
+#
+# Actor2=Actor(env=train_env, input_shape=train_env.state_shape, gamma=0.9, action_space=train_env.actions, lr=0.00001,
+#             n_layers=10, size=512, batch_size=500,max_ep_len=500, logger=None, output_path="output", net_type="lstm")
+# Actor2.train(visualize=False, train_episodes=2000, training_batch_size=500)
+# # Actor.test_agent(test_env, visualize=True, test_episodes=10, folder="Crypto_trader_Result")
+#
+# Actor3=Actor(env=train_env, input_shape=train_env.state_shape, gamma=0.9, action_space=train_env.actions, lr=0.00001,
+#             n_layers=10, size=512, batch_size=500,max_ep_len=500, logger=None, output_path="output", net_type="linear")
+# Actor.train(visualize=False, train_episodes=2000, training_batch_size=500)
 # Actor.test_agent(test_env, visualize=True, test_episodes=10, folder="Crypto_trader_Result")
