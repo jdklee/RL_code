@@ -45,7 +45,8 @@ class Critic(torch.nn.Module):
                 net.append(torch.nn.ReLU())
 
             net.append(torch.nn.Linear(size, self.action_space))
-            self.network = torch.nn.Sequential(*net)
+
+        self.network = torch.nn.Sequential(*net)
         self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.lr)
 
     def forward(self, state):
@@ -391,7 +392,9 @@ def init_weights(m):
         torch.nn.init.xavier_normal_(m.weight)
         m.bias.data.fill_(0)
 
-
+def weight_reset(m):
+    if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
+        m.reset_parameters()
 
 train_env = gym.make('CartPole-v1')
 test_env = gym.make('CartPole-v1')
@@ -402,7 +405,7 @@ test_env.seed(SEED)
 MAX_EPISODES = 5000
 DISCOUNT_FACTOR = 0.99
 N_TRIALS = 25
-REWARD_THRESHOLD = 475
+REWARD_THRESHOLD = 400
 PRINT_EVERY = 10
 PPO_STEPS = 5
 PPO_CLIP = 0.2
@@ -410,31 +413,57 @@ LEARNING_RATE = 0.01
 DROP_OUT_RATE=0.3
 SIZE_OF_HIDDEN_NETWORK=128
 NUMBER_OF_LAYERS=2
-actor = actor(gamma=DISCOUNT_FACTOR, actor_learning_rate=LEARNING_RATE, critic_learning_rate=LEARNING_RATE,
-              state_space=train_env.observation_space.shape[0], size=SIZE_OF_HIDDEN_NETWORK, n_layers=NUMBER_OF_LAYERS,
-              action_space=train_env.action_space.n, ppo=True, drop_out=DROP_OUT_RATE)
-critic = actor.critic
-A_C_Agent = Actor_critic_agent(actor=actor, critic=critic, lr=LEARNING_RATE, episodic=True)
-A_C_Agent.apply(init_weights)
-train_rewards = []
-test_rewards = []
-for episode in range(1, MAX_EPISODES + 1):
-    policy_loss, value_loss, train_reward = A_C_Agent.train_agent(train_env=train_env)
-    test_reward = A_C_Agent.test_agent(test_env=test_env)
+# actor = actor(gamma=DISCOUNT_FACTOR, actor_learning_rate=LEARNING_RATE, critic_learning_rate=LEARNING_RATE,
+#               state_space=train_env.observation_space.shape[0], size=SIZE_OF_HIDDEN_NETWORK, n_layers=NUMBER_OF_LAYERS,
+#               action_space=train_env.action_space.n, ppo=True, drop_out=DROP_OUT_RATE)
+# critic = actor.critic
+# A_C_Agent = Actor_critic_agent(actor=actor, critic=critic, lr=LEARNING_RATE, episodic=True)
+# A_C_Agent.apply(init_weights)
 
-    train_rewards.append(train_reward)
-    test_rewards.append(test_reward)
-    mean_train_rewards = np.mean(train_rewards[-N_TRIALS:])
-    mean_test_rewards = np.mean(test_rewards[-N_TRIALS:])
+done=False
+while not done:
+    train_rewards = []
+    test_rewards = []
+    prev_mean_train_rewards = 0
+    prev_mean_test_rewards = 0
+    grace_count = 0
+    ACTOR = actor(gamma=DISCOUNT_FACTOR, actor_learning_rate=LEARNING_RATE, critic_learning_rate=LEARNING_RATE,
+                  state_space=train_env.observation_space.shape[0], size=SIZE_OF_HIDDEN_NETWORK,
+                  n_layers=NUMBER_OF_LAYERS,
+                  action_space=train_env.action_space.n, ppo=True, drop_out=DROP_OUT_RATE)
+    CRITIC = ACTOR.critic
+    A_C_Agent = Actor_critic_agent(actor=ACTOR, critic=CRITIC, lr=LEARNING_RATE, episodic=True)
+    A_C_Agent.apply(init_weights)
+    for episode in range(1, MAX_EPISODES + 1):
+        policy_loss, value_loss, train_reward = A_C_Agent.train_agent(train_env=train_env)
+        test_reward = A_C_Agent.test_agent(test_env=test_env)
 
-    if episode % PRINT_EVERY == 0:
-        print(
-            f'| Episode: {episode:3} | Mean Train Rewards: {mean_train_rewards:5.1f} | Mean Test Rewards: {mean_test_rewards:5.1f} |')
+        train_rewards.append(train_reward)
+        test_rewards.append(test_reward)
 
-    if mean_test_rewards >= REWARD_THRESHOLD:
-        print(f'Reached reward threshold in {episode} episodes')
 
-        break
+        mean_train_rewards = np.mean(train_rewards[-N_TRIALS:])
+        mean_test_rewards = np.mean(test_rewards[-N_TRIALS:])
+        if prev_mean_test_rewards< mean_test_rewards:
+            grace_count+=1
+            if grace_count>50:
+                grace_count=0
+                # A_C_Agent.apply(weight_reset)
+                print("reset network")
+                break
+
+        prev_mean_train_rewards = mean_train_rewards
+        prev_mean_test_rewards = mean_test_rewards
+
+        if episode % PRINT_EVERY == 0:
+            print(
+                f'| Episode: {episode:3} | Mean Train Rewards: {mean_train_rewards:5.1f} | Mean Test Rewards: {mean_test_rewards:5.1f} |')
+
+        if mean_test_rewards >= REWARD_THRESHOLD:
+            print(f'Reached reward threshold in {episode} episodes')
+            done=True
+
+            break
 
 plt.figure(figsize=(12, 8))
 plt.plot(test_rewards, label='Test Reward')
