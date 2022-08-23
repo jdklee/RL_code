@@ -157,6 +157,8 @@ class LinUCB(BanditPolicy):
         #########   YOUR CODE HERE - ~7 lines.   #####
 
         theta= np.array([np.linalg.inv(self.A[i]).dot(self.b[i]) for i in range(self.n_arms)])
+        # print(x)
+        print(len(x))
         x = np.array([x[i] for i in self.features]).reshape((len(self.features),1))
 
         probs=[np.dot(theta[i].T, x) + self.alpha * np.sqrt(np.dot(x.T, np.dot(np.linalg.inv(self.A[i]), x))) for i in range(self.n_arms)]
@@ -235,13 +237,8 @@ class ThomSampB(BanditPolicy):
 			n_arms: int, the number of different arms/ actions the algorithm can take 
 			features: list of strings, contains the patient features to use 
 			alpha: float, hyperparameter for step size.
-		
-		TODO:
-		Please initialize the following internal variables for the Disjoint Thompson Sampling Bandit algorithm. 
-		Please refer to the paper to understadard what they are. 
-		Please feel free to add additional internal variables if you need them, but they are not necessary. 
 
-		Hints:
+		What it is:
 			- Keep track of a seperate B, mu, f for each action (this is what the Disjoint in the algorithm name means)
 			- Unlike in section 2.2 in the paper where they sample a single mu_tilde, we'll sample a mu_tilde for each arm
 				based on our saved B, f, and mu values for each arm. Also, when we update, we only update the B, f, and mu
@@ -276,10 +273,6 @@ class ThomSampB(BanditPolicy):
 			x: Dictionary containing the possible patient features. 
 		Returns:
 			output: string containing one of ('low', 'medium', 'high')
-
-		TODO:
-		Please implement the "forward pass" for Disjoint Thompson Sampling Bandit algorithm. 
-		Please use the gaussian distribution like they do in the paper
 		"""
         features = np.array([x[i] for i in self.features]).reshape((-1, 1))
         mu_tilda=[]
@@ -312,12 +305,6 @@ class ThomSampB(BanditPolicy):
 			r: the reward you recieved for that action
 		Returns:
 			Nothing
-
-		TODO:
-		Please implement the update step for Disjoint Thompson Sampling Bandit algorithm. 
-		Please use the gaussian distribution like they do in the paper
-
-		Hint: Which parameters should you update?
 		"""
         features = np.array([x[i] for i in self.features]).reshape((-1, 1))
         arm=self.arms.index(a)
